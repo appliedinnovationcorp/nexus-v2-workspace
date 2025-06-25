@@ -1,0 +1,14 @@
+{
+  "name": "nexus-v2-workspace",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "next": "node scripts/openNextFeature.js",
+    "done": "node scripts/openNextFeature.js done"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.11.1"
+}
