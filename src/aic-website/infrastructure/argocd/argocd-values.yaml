@@ -1,0 +1,111 @@
+server:
+  replicas: 2
+  
+  extraArgs:
+    - --insecure
+  
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: kong
+      konghq.com/strip-path: "true"
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - argocd.example.com
+    tls:
+      - secretName: argocd-tls
+        hosts:
+          - argocd.example.com
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+repoServer:
+  replicas: 2
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+applicationSet:
+  enabled: true
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+dex:
+  enabled: false
+
+controller:
+  replicas: 2
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+redis:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+configs:
+  cm:
+    url: https://argocd.example.com
+    
+    # OIDC configuration for Keycloak
+    oidc.config: |
+      name: Keycloak
+      issuer: https://keycloak.example.com/auth/realms/aic
+      clientID: argocd
+      clientSecret: $oidc.keycloak.clientSecret
+      requestedScopes: ["openid", "profile", "email", "groups"]
+    
+    # Repository credentials
+    repositories: |
+      - type: git
+        url: https://github.com/applied-innovation-corp/aic-website.git
+        username: git
+        password: $github.password
+    
+    # Resource customizations
+    resource.customizations: |
+      networking.k8s.io/Ingress:
+        health.lua: |
+          hs = {}
+          hs.status = "Healthy"
+          return hs
+  
+  rbac:
+    policy.default: role:readonly
+    
+    policy.csv: |
+      p, role:org-admin, applications, *, */*, allow
+      p, role:org-admin, clusters, get, *, allow
+      p, role:org-admin, repositories, get, *, allow
+      p, role:org-admin, repositories, create, *, allow
+      p, role:org-admin, repositories, update, *, allow
+      p, role:org-admin, repositories, delete, *, allow
+      
+      g, aic-admins, role:org-admin

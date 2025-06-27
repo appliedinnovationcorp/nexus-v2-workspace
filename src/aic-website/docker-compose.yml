@@ -30,116 +30,138 @@ services:
     networks:
       - aic-network
 
-  # SMB Portal
-  web-smb:
+  # Authentication Service
+  auth-service:
     build:
-      context: .
-      dockerfile: apps/web-smb/Dockerfile
+      context: services/auth-service
+      dockerfile: Dockerfile
     ports:
-      - "3001:3000"
+      - "8000:8000"
     environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/aicwebsite
-      - MONGODB_URL=mongodb://aicadmin:password@mongodb:27017/aicwebsite
-      - MEILISEARCH_HOST=http://meilisearch:7700
-      - MEILISEARCH_API_KEY=masterKey
+      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/auth_db
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=your-jwt-secret-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRE_MINUTES=30
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - OTEL_SERVICE_NAME=auth-service
     depends_on:
       - postgres
-      - mongodb
-      - meilisearch
-    networks:
-      - aic-network
-
-  # Enterprise Portal
-  web-enterprise:
-    build:
-      context: .
-      dockerfile: apps/web-enterprise/Dockerfile
-    ports:
-      - "3002:3000"
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/aicwebsite
-      - MONGODB_URL=mongodb://aicadmin:password@mongodb:27017/aicwebsite
-      - MEILISEARCH_HOST=http://meilisearch:7700
-      - MEILISEARCH_API_KEY=masterKey
-    depends_on:
-      - postgres
-      - mongodb
-      - meilisearch
-    networks:
-      - aic-network
-
-  # Nexus Portal
-  web-nexus:
-    build:
-      context: .
-      dockerfile: apps/web-nexus/Dockerfile
-    ports:
-      - "3003:3000"
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/aicwebsite
-      - MONGODB_URL=mongodb://aicadmin:password@mongodb:27017/aicwebsite
-    depends_on:
-      - postgres
-      - mongodb
-    networks:
-      - aic-network
-
-  # Investor Portal
-  web-investors:
-    build:
-      context: .
-      dockerfile: apps/web-investors/Dockerfile
-    ports:
-      - "3004:3000"
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/aicwebsite
-    depends_on:
-      - postgres
-    networks:
-      - aic-network
-
-  # Admin Dashboard
-  admin-dashboard:
-    build:
-      context: .
-      dockerfile: apps/admin-dashboard/Dockerfile
-    ports:
-      - "3005:3000"
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/aicwebsite
-      - MONGODB_URL=mongodb://aicadmin:password@mongodb:27017/aicwebsite
-      - MEILISEARCH_HOST=http://meilisearch:7700
-      - MEILISEARCH_API_KEY=masterKey
-      - PAYLOAD_SECRET=your-payload-secret
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    depends_on:
-      - postgres
-      - mongodb
-      - meilisearch
       - redis
+      - jaeger
     networks:
       - aic-network
 
-  # CMS Backend
-  cms:
+  # User Service
+  user-service:
     build:
-      context: .
-      dockerfile: apps/cms/Dockerfile
+      context: services/user-service
+      dockerfile: Dockerfile
     ports:
-      - "3006:3000"
+      - "8001:8001"
     environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/aicwebsite
-      - MONGODB_URL=mongodb://aicadmin:password@mongodb:27017/aicwebsite
-      - PAYLOAD_SECRET=your-payload-secret
+      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/user_db
+      - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:8000
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - OTEL_SERVICE_NAME=user-service
     depends_on:
       - postgres
-      - mongodb
+      - redis
+      - auth-service
+      - jaeger
+    networks:
+      - aic-network
+
+  # Content Service
+  content-service:
+    build:
+      context: services/content-service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/content_db
+      - REDIS_URL=redis://redis:6379
+      - AWS_ACCESS_KEY_ID=your-aws-access-key
+      - AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+      - AWS_REGION=us-east-1
+      - S3_BUCKET_NAME=aic-website-media
+      - AUTH_SERVICE_URL=http://auth-service:8000
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - OTEL_SERVICE_NAME=content-service
+    depends_on:
+      - postgres
+      - redis
+      - auth-service
+      - jaeger
+    networks:
+      - aic-network
+
+  # Notification Service
+  notification-service:
+    build:
+      context: services/notification-service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/notification_db
+      - REDIS_URL=redis://redis:6379
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USERNAME=your-email@gmail.com
+      - SMTP_PASSWORD=your-app-password
+      - FROM_EMAIL=noreply@aic-website.com
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - OTEL_SERVICE_NAME=notification-service
+    depends_on:
+      - postgres
+      - redis
+      - jaeger
+    networks:
+      - aic-network
+
+  # AI Engine Service
+  ai-engine:
+    build:
+      context: services/ai-engine
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/ai_engine_db
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=your-openai-api-key
+      - ANTHROPIC_API_KEY=your-anthropic-api-key
+      - AWS_REGION=us-east-1
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - OTEL_SERVICE_NAME=ai-engine
+    depends_on:
+      - postgres
+      - redis
+      - jaeger
+    networks:
+      - aic-network
+
+  # Event Store Service
+  event-store:
+    build:
+      context: services/event-store
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      - DATABASE_URL=postgresql://aicadmin:password@postgres:5432/event_store_db
+      - REDIS_URL=redis://redis:6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - OTEL_SERVICE_NAME=event-store
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+      - jaeger
     networks:
       - aic-network
 
@@ -150,15 +172,16 @@ services:
       - POSTGRES_DB=aicwebsite
       - POSTGRES_USER=aicadmin
       - POSTGRES_PASSWORD=password
+      - POSTGRES_MULTIPLE_DATABASES=auth_db,user_db,content_db,notification_db,ai_engine_db,event_store_db
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./scripts/init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh
     networks:
       - aic-network
 
-  # MongoDB Database
+  # MongoDB
   mongodb:
     image: mongo:7
     environment:
@@ -169,11 +192,21 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
-      - ./infra/docker/mongodb/init.js:/docker-entrypoint-initdb.d/init.js
     networks:
       - aic-network
 
-  # Meilisearch (AI-Enhanced Search)
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - aic-network
+
+  # MeiliSearch
   meilisearch:
     image: getmeili/meilisearch:v1.5
     environment:
@@ -186,85 +219,67 @@ services:
     networks:
       - aic-network
 
-  # Redis (Caching & Sessions)
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - aic-network
-
-  # Ollama (Local LLM)
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
+  # Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
     environment:
-      - OLLAMA_HOST=0.0.0.0
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     networks:
       - aic-network
 
-  # Prometheus (Monitoring)
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - aic-network
+
+  # Jaeger Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - aic-network
+
+  # Prometheus
   prometheus:
     image: prom/prometheus:latest
     ports:
       - "9090:9090"
     volumes:
-      - ./infra/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--web.enable-lifecycle'
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
     networks:
       - aic-network
 
-  # Grafana (Monitoring Dashboard)
+  # Grafana
   grafana:
     image: grafana/grafana:latest
     ports:
-      - "3007:3000"
+      - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./infra/docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ./infra/docker/grafana/datasources:/etc/grafana/provisioning/datasources
-    networks:
-      - aic-network
-
-  # Nginx (Reverse Proxy)
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./infra/docker/nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./infra/docker/nginx/ssl:/etc/nginx/ssl
-    depends_on:
-      - web-main
-      - web-smb
-      - web-enterprise
-      - web-nexus
-      - web-investors
-      - admin-dashboard
     networks:
       - aic-network
 
 volumes:
   postgres_data:
   mongodb_data:
-  meilisearch_data:
   redis_data:
-  ollama_data:
-  prometheus_data:
+  meilisearch_data:
   grafana_data:
 
 networks:

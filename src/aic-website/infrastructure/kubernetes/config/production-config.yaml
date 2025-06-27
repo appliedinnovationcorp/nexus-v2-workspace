@@ -1,0 +1,289 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: production-config
+  namespace: backend-services
+  labels:
+    app: aic-website
+    environment: production
+    part-of: aic-website
+data:
+  environment: "production"
+  log-level: "warn"
+  debug-mode: "false"
+  
+  database-config.json: |
+    {
+      "postgresql": {
+        "host": "aic-website-db.default.svc.cluster.local",
+        "port": 5432,
+        "database": "aic_production",
+        "ssl": true,
+        "sslMode": "require",
+        "poolSize": 20,
+        "connectionTimeout": 15000,
+        "idleTimeout": 300000,
+        "logQueries": false,
+        "readReplicas": [
+          "aic-website-db-read-1.default.svc.cluster.local",
+          "aic-website-db-read-2.default.svc.cluster.local"
+        ]
+      },
+      "redis": {
+        "cluster": true,
+        "nodes": [
+          "aic-website-redis-0.default.svc.cluster.local:6379",
+          "aic-website-redis-1.default.svc.cluster.local:6379",
+          "aic-website-redis-2.default.svc.cluster.local:6379"
+        ],
+        "keyPrefix": "aic:prod:",
+        "ttl": 1800,
+        "maxRetries": 10,
+        "retryDelayOnFailover": 100
+      },
+      "mongodb": {
+        "connectionString": "mongodb://aic-website-mongo-0.default.svc.cluster.local:27017,aic-website-mongo-1.default.svc.cluster.local:27017,aic-website-mongo-2.default.svc.cluster.local:27017/aic_production?replicaSet=rs0",
+        "ssl": true,
+        "authSource": "admin",
+        "poolSize": 20,
+        "readPreference": "secondaryPreferred"
+      }
+    }
+  
+  api-config.json: |
+    {
+      "rateLimit": {
+        "enabled": true,
+        "windowMs": 900000,
+        "max": 100,
+        "skipSuccessfulRequests": true,
+        "standardHeaders": true,
+        "legacyHeaders": false
+      },
+      "cors": {
+        "allowedOrigins": [
+          "https://aicorp.com",
+          "https://www.aicorp.com",
+          "https://smb.aicorp.com",
+          "https://enterprise.aicorp.com",
+          "https://nexus.aicorp.com",
+          "https://investors.aicorp.com",
+          "https://admin.aicorp.com"
+        ],
+        "credentials": true,
+        "maxAge": 86400,
+        "optionsSuccessStatus": 204
+      },
+      "security": {
+        "helmet": {
+          "contentSecurityPolicy": {
+            "directives": {
+              "defaultSrc": ["'self'"],
+              "styleSrc": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+              "fontSrc": ["'self'", "https://fonts.gstatic.com"],
+              "imgSrc": ["'self'", "data:", "https:"],
+              "scriptSrc": ["'self'"]
+            }
+          },
+          "crossOriginEmbedderPolicy": true,
+          "hsts": {
+            "maxAge": 31536000,
+            "includeSubDomains": true,
+            "preload": true
+          }
+        },
+        "jwt": {
+          "expiresIn": "4h",
+          "refreshExpiresIn": "1d",
+          "algorithm": "RS256"
+        }
+      },
+      "cache": {
+        "enabled": true,
+        "ttl": 600,
+        "checkPeriod": 120,
+        "maxKeys": 10000
+      }
+    }
+  
+  monitoring-config.json: |
+    {
+      "metrics": {
+        "enabled": true,
+        "interval": 15,
+        "detailed": true,
+        "customMetrics": true
+      },
+      "tracing": {
+        "enabled": true,
+        "sampleRate": 0.1,
+        "jaegerEndpoint": "http://jaeger-collector.observability:14268/api/traces"
+      },
+      "logging": {
+        "level": "warn",
+        "structured": true,
+        "includeRequestId": true,
+        "excludeHealthChecks": true,
+        "logRotation": {
+          "enabled": true,
+          "maxSize": "100MB",
+          "maxFiles": 10
+        }
+      },
+      "alerts": {
+        "enabled": true,
+        "thresholds": {
+          "errorRate": 0.05,
+          "responseTime": 2000,
+          "memoryUsage": 0.85,
+          "cpuUsage": 0.8
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: production-config
+  namespace: ai-services
+  labels:
+    app: ai-services
+    environment: production
+    part-of: aic-website
+data:
+  environment: "production"
+  log-level: "warn"
+  
+  ai-production-config.json: |
+    {
+      "providers": {
+        "openai": {
+          "enabled": true,
+          "rateLimit": true,
+          "costTracking": true,
+          "budgetLimits": {
+            "daily": 100,
+            "monthly": 2000
+          },
+          "models": {
+            "chat": "gpt-4-turbo-preview",
+            "embedding": "text-embedding-3-large",
+            "vision": "gpt-4-vision-preview"
+          }
+        },
+        "ollama": {
+          "enabled": true,
+          "host": "http://ollama.ai-services:11434",
+          "timeout": 30000,
+          "loadBalancing": true,
+          "healthCheck": {
+            "enabled": true,
+            "interval": 30
+          }
+        }
+      },
+      "caching": {
+        "enabled": true,
+        "ttl": 7200,
+        "redis": {
+          "keyPrefix": "ai:prod:",
+          "cluster": true
+        },
+        "compression": true
+      },
+      "monitoring": {
+        "enabled": true,
+        "trackCosts": true,
+        "trackLatency": true,
+        "trackTokenUsage": true,
+        "alertThresholds": {
+          "costPerHour": 50,
+          "latencyP95": 3000,
+          "errorRate": 0.02
+        }
+      },
+      "security": {
+        "inputSanitization": true,
+        "outputFiltering": true,
+        "auditLogging": true,
+        "encryptionAtRest": true
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: production-config
+  namespace: cms
+  labels:
+    app: ghost-cms
+    environment: production
+    part-of: aic-website
+data:
+  environment: "production"
+  
+  ghost-production-config.json: |
+    {
+      "url": "https://cms.aicorp.com",
+      "database": {
+        "client": "mysql",
+        "connection": {
+          "host": "ghost-mysql.cms.svc.cluster.local",
+          "port": 3306,
+          "database": "ghost_production",
+          "ssl": {
+            "rejectUnauthorized": true
+          }
+        },
+        "pool": {
+          "min": 5,
+          "max": 20,
+          "acquireTimeoutMillis": 30000,
+          "createTimeoutMillis": 30000,
+          "destroyTimeoutMillis": 5000,
+          "idleTimeoutMillis": 30000,
+          "reapIntervalMillis": 1000,
+          "createRetryIntervalMillis": 100
+        }
+      },
+      "mail": {
+        "transport": "SMTP",
+        "options": {
+          "service": "Mailgun",
+          "host": "smtp.mailgun.org",
+          "port": 587,
+          "secure": false,
+          "pool": true,
+          "maxConnections": 5,
+          "maxMessages": 100
+        }
+      },
+      "logging": {
+        "level": "warn",
+        "transports": ["file"],
+        "rotation": {
+          "enabled": true,
+          "period": "1d",
+          "count": 30
+        }
+      },
+      "imageOptimization": {
+        "resize": true,
+        "quality": 85,
+        "formats": ["webp", "avif", "jpg"],
+        "responsive": true
+      },
+      "caching": {
+        "frontend": {
+          "maxAge": 3600
+        },
+        "admin": {
+          "maxAge": 0
+        }
+      },
+      "security": {
+        "forceSSL": true,
+        "useSecureCookies": true,
+        "trustProxy": true
+      }
+    }

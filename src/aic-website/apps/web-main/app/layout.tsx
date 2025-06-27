@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, Roboto } from 'next/font/google'
-import { Header } from '@aic/ui'
+import { Header } from '../src/components/header'
+import { Footer } from '../src/components/footer'
 import './globals.css'
 
 const inter = Inter({
@@ -82,56 +83,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${roboto.variable}`}>
       <body className="min-h-screen bg-background font-sans antialiased">
-        <Header variant="main" />
+        <Header />
         <main className="flex-1">
           {children}
         </main>
-        <footer className="border-t bg-background">
-          <div className="container mx-auto px-4 py-8">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Applied Innovation Corporation</h3>
-                <p className="text-sm text-muted-foreground">
-                  Transforming business through applied AI solutions.
-                </p>
-              </div>
-              <div className="space-y-4">
-                <h4 className="text-sm font-semibold">Quick Links</h4>
-                <ul className="space-y-2 text-sm">
-                  <li><a href="/about" className="text-muted-foreground hover:text-foreground">About</a></li>
-                  <li><a href="/divisions" className="text-muted-foreground hover:text-foreground">Divisions</a></li>
-                  <li><a href="/products" className="text-muted-foreground hover:text-foreground">Products</a></li>
-                  <li><a href="/services" className="text-muted-foreground hover:text-foreground">Services</a></li>
-                </ul>
-              </div>
-              <div className="space-y-4">
-                <h4 className="text-sm font-semibold">Resources</h4>
-                <ul className="space-y-2 text-sm">
-                  <li><a href="/blog" className="text-muted-foreground hover:text-foreground">Blog</a></li>
-                  <li><a href="/webinars" className="text-muted-foreground hover:text-foreground">Webinars</a></li>
-                  <li><a href="/resources" className="text-muted-foreground hover:text-foreground">Resources</a></li>
-                  <li><a href="/careers" className="text-muted-foreground hover:text-foreground">Careers</a></li>
-                </ul>
-              </div>
-              <div className="space-y-4">
-                <h4 className="text-sm font-semibold">Connect</h4>
-                <ul className="space-y-2 text-sm">
-                  <li><a href="/contact" className="text-muted-foreground hover:text-foreground">Contact</a></li>
-                  <li><a href="/investors" className="text-muted-foreground hover:text-foreground">Investor Relations</a></li>
-                  <li><a href="#" className="text-muted-foreground hover:text-foreground">LinkedIn</a></li>
-                  <li><a href="#" className="text-muted-foreground hover:text-foreground">GitHub</a></li>
-                </ul>
-              </div>
-            </div>
-            <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
-              <p>&copy; 2025 Applied Innovation Corporation. All rights reserved.</p>
-              <div className="mt-2 space-x-4">
-                <a href="/privacy" className="hover:text-foreground">Privacy Policy</a>
-                <a href="/terms" className="hover:text-foreground">Terms of Service</a>
-              </div>
-            </div>
-          </div>
-        </footer>
+        <Footer />
       </body>
     </html>
   )

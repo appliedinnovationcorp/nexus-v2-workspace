@@ -1,0 +1,175 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-advanced-config
+  namespace: backend-services
+  labels:
+    app: backend-api
+    component: advanced-config
+    part-of: aic-website
+data:
+  # CQRS Configuration
+  cqrs-config.json: |
+    {
+      "commandBus": {
+        "middleware": ["validation", "authorization", "logging", "metrics"],
+        "timeout": 30000,
+        "retries": 3
+      },
+      "queryBus": {
+        "middleware": ["caching", "logging", "metrics"],
+        "timeout": 15000,
+        "caching": {
+          "enabled": true,
+          "ttl": 300,
+          "strategy": "lru"
+        }
+      },
+      "eventBus": {
+        "provider": "kafka",
+        "topics": {
+          "userEvents": "user-events",
+          "contentEvents": "content-events",
+          "systemEvents": "system-events"
+        },
+        "partitions": 3,
+        "replication": 2
+      },
+      "eventStore": {
+        "provider": "postgresql",
+        "snapshotFrequency": 100,
+        "retention": "1y"
+      }
+    }
+  
+  # Saga Configuration
+  saga-config.json: |
+    {
+      "orchestrator": {
+        "maxConcurrentSagas": 100,
+        "timeout": 300000,
+        "retryPolicy": {
+          "maxAttempts": 3,
+          "backoff": "exponential",
+          "initialDelay": 1000,
+          "maxDelay": 30000
+        }
+      },
+      "sagas": {
+        "userRegistration": {
+          "steps": ["createUser", "sendWelcomeEmail", "setupProfile"],
+          "compensations": ["deleteUser", "cancelEmail", "cleanupProfile"]
+        },
+        "contentPublication": {
+          "steps": ["validateContent", "processImages", "publishContent", "updateIndex"],
+          "compensations": ["revertContent", "cleanupImages", "unpublishContent", "removeFromIndex"]
+        }
+      }
+    }
+  
+  # Circuit Breaker Configuration
+  circuit-breaker-config.json: |
+    {
+      "default": {
+        "failureThreshold": 5,
+        "timeout": 60000,
+        "resetTimeout": 30000,
+        "monitoringPeriod": 10000
+      },
+      "services": {
+        "database": {
+          "failureThreshold": 3,
+          "timeout": 30000,
+          "resetTimeout": 60000
+        },
+        "ai-services": {
+          "failureThreshold": 10,
+          "timeout": 120000,
+          "resetTimeout": 30000
+        },
+        "external-api": {
+          "failureThreshold": 5,
+          "timeout": 30000,
+          "resetTimeout": 60000
+        }
+      }
+    }
+  
+  # Workflow Configuration
+  workflow-config.json: |
+    {
+      "engine": {
+        "maxConcurrentWorkflows": 50,
+        "persistenceProvider": "postgresql",
+        "lockProvider": "redis"
+      },
+      "workflows": {
+        "leadProcessing": {
+          "steps": [
+            {
+              "name": "validateLead",
+              "type": "activity",
+              "timeout": 30000
+            },
+            {
+              "name": "scoreLead",
+              "type": "activity",
+              "timeout": 60000,
+              "retries": 2
+            },
+            {
+              "name": "assignToSales",
+              "type": "activity",
+              "timeout": 15000
+            },
+            {
+              "name": "sendNotification",
+              "type": "activity",
+              "timeout": 10000,
+              "retries": 3
+            }
+          ]
+        }
+      }
+    }
+  
+  # Performance Configuration
+  performance-config.json: |
+    {
+      "caching": {
+        "layers": {
+          "l1": {
+            "type": "memory",
+            "maxSize": "100MB",
+            "ttl": 300
+          },
+          "l2": {
+            "type": "redis",
+            "maxSize": "1GB",
+            "ttl": 3600
+          }
+        },
+        "strategies": {
+          "user-data": "l1+l2",
+          "content": "l2",
+          "static": "l1"
+        }
+      },
+      "compression": {
+        "enabled": true,
+        "algorithm": "gzip",
+        "level": 6,
+        "threshold": 1024
+      },
+      "pooling": {
+        "database": {
+          "min": 5,
+          "max": 20,
+          "acquireTimeoutMillis": 30000
+        },
+        "redis": {
+          "min": 2,
+          "max": 10
+        }
+      }
+    }

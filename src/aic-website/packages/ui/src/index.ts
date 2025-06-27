@@ -1,34 +1,3 @@
-// Core UI Components Export
-export * from './components/ui/button'
-export * from './components/ui/card'
-export * from './components/ui/input'
-export * from './components/ui/label'
-export * from './components/ui/textarea'
-export * from './components/ui/select'
-export * from './components/ui/dialog'
-export * from './components/ui/dropdown-menu'
-export * from './components/ui/navigation-menu'
-export * from './components/ui/sheet'
-export * from './components/ui/tabs'
-export * from './components/ui/toast'
-export * from './components/ui/tooltip'
-export * from './components/ui/avatar'
-export * from './components/ui/badge'
-export * from './components/ui/progress'
-export * from './components/ui/separator'
-export * from './components/ui/switch'
-
-// AIC-Specific Components
-export * from './components/aic/header'
-export * from './components/aic/footer'
-export * from './components/aic/hero-section'
-export * from './components/aic/feature-card'
-export * from './components/aic/cta-section'
-export * from './components/aic/testimonial'
-export * from './components/aic/ai-chat-widget'
-export * from './components/aic/lead-form'
-export * from './components/aic/division-selector'
-
-// Utilities
-export * from './lib/utils'
-export * from './lib/cn'
+// AIC UI components
+export const Button = () => null
+export const Header = () => null

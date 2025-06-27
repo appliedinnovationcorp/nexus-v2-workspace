@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ghost-cms
+  namespace: cms
+  labels:
+    app: ghost-cms
+    part-of: aic-website
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ghost-cms
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ghost-cms
+      annotations:
+        kuma.io/mesh: default
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "2368"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: ghost
+          image: ghost:5.33.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 2368
+              name: http
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: database__client
+              value: "mysql"
+            - name: database__connection__host
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-mysql-credentials
+                  key: host
+            - name: database__connection__port
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-mysql-credentials
+                  key: port
+            - name: database__connection__user
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-mysql-credentials
+                  key: username
+            - name: database__connection__password
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-mysql-credentials
+                  key: password
+            - name: database__connection__database
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-mysql-credentials
+                  key: database
+            - name: url
+              value: "https://cms.example.com"
+            - name: mail__transport
+              value: "SMTP"
+            - name: mail__options__service
+              value: "Mailgun"
+            - name: mail__options__auth__user
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-mail-credentials
+                  key: username
+            - name: mail__options__auth__pass
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-mail-credentials
+                  key: password
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /ghost/api/v3/admin/site/
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ghost/api/v3/admin/site/
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: content
+              mountPath: /var/lib/ghost/content
+      volumes:
+        - name: content
+          persistentVolumeClaim:
+            claimName: ghost-content
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - ghost-cms
+                topologyKey: kubernetes.io/hostname

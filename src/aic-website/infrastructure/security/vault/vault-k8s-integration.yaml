@@ -1,0 +1,482 @@
+# Kubernetes Integration Resources for Vault
+# This file contains all necessary Kubernetes resources for Vault integration
+
+---
+# Service Account for AIC Website Application
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aic-website
+  namespace: aic-website-prod
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "aic-website"
+    vault.hashicorp.com/agent-inject-secret-database: "aic-website/data/database"
+    vault.hashicorp.com/agent-inject-template-database: |
+      {{- with secret "aic-website/data/database" -}}
+      export DATABASE_URL="postgresql://{{ .Data.data.username }}:{{ .Data.data.password }}@{{ .Data.data.host }}:{{ .Data.data.port }}/{{ .Data.data.database }}"
+      export DB_USERNAME="{{ .Data.data.username }}"
+      export DB_PASSWORD="{{ .Data.data.password }}"
+      export DB_HOST="{{ .Data.data.host }}"
+      export DB_PORT="{{ .Data.data.port }}"
+      export DB_NAME="{{ .Data.data.database }}"
+      {{- end -}}
+    vault.hashicorp.com/agent-inject-secret-redis: "aic-website/data/redis"
+    vault.hashicorp.com/agent-inject-template-redis: |
+      {{- with secret "aic-website/data/redis" -}}
+      export REDIS_URL="redis://:{{ .Data.data.password }}@{{ .Data.data.host }}:{{ .Data.data.port }}"
+      export REDIS_PASSWORD="{{ .Data.data.password }}"
+      export REDIS_HOST="{{ .Data.data.host }}"
+      export REDIS_PORT="{{ .Data.data.port }}"
+      {{- end -}}
+    vault.hashicorp.com/agent-inject-secret-jwt: "aic-website/data/jwt"
+    vault.hashicorp.com/agent-inject-template-jwt: |
+      {{- with secret "aic-website/data/jwt" -}}
+      export JWT_SECRET="{{ .Data.data.secret }}"
+      export JWT_ALGORITHM="{{ .Data.data.algorithm }}"
+      export JWT_EXPIRATION="{{ .Data.data.expiration }}"
+      {{- end -}}
+    vault.hashicorp.com/agent-inject-secret-api-keys: "aic-website/data/api-keys"
+    vault.hashicorp.com/agent-inject-template-api-keys: |
+      {{- with secret "aic-website/data/api-keys" -}}
+      export INTERNAL_API_KEY="{{ .Data.data.internal_api_key }}"
+      export EXTERNAL_API_KEY="{{ .Data.data.external_api_key }}"
+      export WEBHOOK_SECRET="{{ .Data.data.webhook_secret }}"
+      {{- end -}}
+
+---
+# Service Account for Staging Environment
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aic-website
+  namespace: aic-website-staging
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "aic-website"
+    vault.hashicorp.com/agent-inject-secret-database: "aic-website/data/database"
+    vault.hashicorp.com/agent-inject-template-database: |
+      {{- with secret "aic-website/data/database" -}}
+      export DATABASE_URL="postgresql://{{ .Data.data.username }}:{{ .Data.data.password }}@{{ .Data.data.host }}:{{ .Data.data.port }}/{{ .Data.data.database }}"
+      {{- end -}}
+
+---
+# Service Account for Development Environment
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aic-website
+  namespace: aic-website-dev
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "aic-website"
+    vault.hashicorp.com/agent-inject-secret-database: "aic-website/data/database"
+    vault.hashicorp.com/agent-inject-template-database: |
+      {{- with secret "aic-website/data/database" -}}
+      export DATABASE_URL="postgresql://{{ .Data.data.username }}:{{ .Data.data.password }}@{{ .Data.data.host }}:{{ .Data.data.port }}/{{ .Data.data.database }}"
+      {{- end -}}
+
+---
+# Service Account for GitLab CI
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitlab-ci
+  namespace: gitlab-system
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "gitlab-ci"
+    vault.hashicorp.com/agent-inject-secret-ci-secrets: "aic-website/data/ci/gitlab"
+    vault.hashicorp.com/agent-inject-template-ci-secrets: |
+      {{- with secret "aic-website/data/ci/gitlab" -}}
+      export GITLAB_TOKEN="{{ .Data.data.token }}"
+      export WEBHOOK_SECRET="{{ .Data.data.webhook_secret }}"
+      {{- end -}}
+
+---
+# ClusterRole for Vault Service Account Token Review
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vault-auth
+rules:
+- apiGroups: [""]
+  resources: ["serviceaccounts"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["serviceaccounts/token"]
+  verbs: ["create"]
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["tokenreviews"]
+  verbs: ["create"]
+
+---
+# ClusterRoleBinding for Vault Service Account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-auth
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vault-auth
+subjects:
+- kind: ServiceAccount
+  name: vault
+  namespace: vault-system
+
+---
+# Secret Store CSI Driver SecretProviderClass for Database Credentials
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: aic-website-database-secrets
+  namespace: aic-website-prod
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: "https://vault.aicorp.com"
+    roleName: "aic-website"
+    objects: |
+      - objectName: "database-username"
+        secretPath: "aic-website/data/database"
+        secretKey: "username"
+      - objectName: "database-password"
+        secretPath: "aic-website/data/database"
+        secretKey: "password"
+      - objectName: "database-host"
+        secretPath: "aic-website/data/database"
+        secretKey: "host"
+      - objectName: "database-port"
+        secretPath: "aic-website/data/database"
+        secretKey: "port"
+      - objectName: "database-name"
+        secretPath: "aic-website/data/database"
+        secretKey: "database"
+  secretObjects:
+  - secretName: aic-website-database-secret
+    type: Opaque
+    data:
+    - objectName: "database-username"
+      key: "username"
+    - objectName: "database-password"
+      key: "password"
+    - objectName: "database-host"
+      key: "host"
+    - objectName: "database-port"
+      key: "port"
+    - objectName: "database-name"
+      key: "database"
+
+---
+# Secret Store CSI Driver SecretProviderClass for Redis Credentials
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: aic-website-redis-secrets
+  namespace: aic-website-prod
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: "https://vault.aicorp.com"
+    roleName: "aic-website"
+    objects: |
+      - objectName: "redis-password"
+        secretPath: "aic-website/data/redis"
+        secretKey: "password"
+      - objectName: "redis-host"
+        secretPath: "aic-website/data/redis"
+        secretKey: "host"
+      - objectName: "redis-port"
+        secretPath: "aic-website/data/redis"
+        secretKey: "port"
+  secretObjects:
+  - secretName: aic-website-redis-secret
+    type: Opaque
+    data:
+    - objectName: "redis-password"
+      key: "password"
+    - objectName: "redis-host"
+      key: "host"
+    - objectName: "redis-port"
+      key: "port"
+
+---
+# Secret Store CSI Driver SecretProviderClass for API Keys
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: aic-website-api-secrets
+  namespace: aic-website-prod
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: "https://vault.aicorp.com"
+    roleName: "aic-website"
+    objects: |
+      - objectName: "internal-api-key"
+        secretPath: "aic-website/data/api-keys"
+        secretKey: "internal_api_key"
+      - objectName: "external-api-key"
+        secretPath: "aic-website/data/api-keys"
+        secretKey: "external_api_key"
+      - objectName: "webhook-secret"
+        secretPath: "aic-website/data/api-keys"
+        secretKey: "webhook_secret"
+  secretObjects:
+  - secretName: aic-website-api-secret
+    type: Opaque
+    data:
+    - objectName: "internal-api-key"
+      key: "internal_api_key"
+    - objectName: "external-api-key"
+      key: "external_api_key"
+    - objectName: "webhook-secret"
+      key: "webhook_secret"
+
+---
+# Example Deployment using Vault Agent Injection
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aic-website-example
+  namespace: aic-website-prod
+  labels:
+    app: aic-website
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aic-website
+  template:
+    metadata:
+      labels:
+        app: aic-website
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "aic-website"
+        vault.hashicorp.com/agent-inject-secret-config: "aic-website/data/database"
+        vault.hashicorp.com/agent-inject-template-config: |
+          {{- with secret "aic-website/data/database" -}}
+          {
+            "database": {
+              "host": "{{ .Data.data.host }}",
+              "port": {{ .Data.data.port }},
+              "username": "{{ .Data.data.username }}",
+              "password": "{{ .Data.data.password }}",
+              "database": "{{ .Data.data.database }}"
+            }
+          }
+          {{- end -}}
+        vault.hashicorp.com/agent-inject-secret-env: "aic-website/data/database"
+        vault.hashicorp.com/agent-inject-template-env: |
+          {{- with secret "aic-website/data/database" -}}
+          DATABASE_URL=postgresql://{{ .Data.data.username }}:{{ .Data.data.password }}@{{ .Data.data.host }}:{{ .Data.data.port }}/{{ .Data.data.database }}
+          {{- end -}}
+    spec:
+      serviceAccountName: aic-website
+      containers:
+      - name: aic-website
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        env:
+        - name: VAULT_ADDR
+          value: "https://vault.aicorp.com"
+        volumeMounts:
+        - name: secrets-store
+          mountPath: "/mnt/secrets-store"
+          readOnly: true
+        - name: vault-secrets
+          mountPath: "/vault/secrets"
+          readOnly: true
+      volumes:
+      - name: secrets-store
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "aic-website-database-secrets"
+      - name: vault-secrets
+        emptyDir: {}
+
+---
+# Example Job using CSI Driver for Secret Mounting
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aic-website-migration
+  namespace: aic-website-prod
+spec:
+  template:
+    metadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: "false"
+    spec:
+      serviceAccountName: aic-website
+      containers:
+      - name: migration
+        image: migrate/migrate:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          source /mnt/secrets-store/database-credentials
+          migrate -path /migrations -database $DATABASE_URL up
+        volumeMounts:
+        - name: secrets-store
+          mountPath: "/mnt/secrets-store"
+          readOnly: true
+        - name: migrations
+          mountPath: "/migrations"
+          readOnly: true
+      volumes:
+      - name: secrets-store
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "aic-website-database-secrets"
+      - name: migrations
+        configMap:
+          name: database-migrations
+      restartPolicy: OnFailure
+
+---
+# ConfigMap for Database Migrations
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-migrations
+  namespace: aic-website-prod
+data:
+  001_initial.up.sql: |
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username VARCHAR(255) UNIQUE NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  001_initial.down.sql: |
+    DROP TABLE IF EXISTS users;
+
+---
+# Network Policy for Vault Communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-vault-communication
+  namespace: aic-website-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: aic-website
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: vault-system
+    ports:
+    - protocol: TCP
+      port: 8200
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+
+---
+# Pod Security Policy for Vault Integration
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: aic-website-vault-psp
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+    - 'csi'
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  seLinux:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'
+
+---
+# Role for Pod Security Policy
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: aic-website-vault-psp
+  namespace: aic-website-prod
+rules:
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs: ['use']
+  resourceNames:
+  - aic-website-vault-psp
+
+---
+# RoleBinding for Pod Security Policy
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aic-website-vault-psp
+  namespace: aic-website-prod
+roleRef:
+  kind: Role
+  name: aic-website-vault-psp
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: aic-website
+  namespace: aic-website-prod
+
+---
+# Monitoring ServiceMonitor for Vault Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vault-metrics
+  namespace: vault-system
+  labels:
+    app: vault
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vault
+  endpoints:
+  - port: http
+    path: /v1/sys/metrics
+    params:
+      format: ['prometheus']
+    bearerTokenSecret:
+      name: vault-metrics-token
+      key: token
+    interval: 30s
+    scrapeTimeout: 10s
+
+---
+# Secret for Vault Metrics Token
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-metrics-token
+  namespace: vault-system
+type: Opaque
+data:
+  token: # Base64 encoded Vault token with metrics read permission

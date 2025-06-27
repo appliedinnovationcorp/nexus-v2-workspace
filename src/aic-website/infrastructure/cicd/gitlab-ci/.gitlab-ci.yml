@@ -1,0 +1,81 @@
+stages:
+  - security
+  - compliance
+  - registry
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  KUBERNETES_VERSION: 1.25.0
+  HELM_VERSION: 3.11.0
+
+.security_template: &security_template
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  before_script:
+    - docker info
+
+security:container-scanning:
+  <<: *security_template
+  stage: security
+  script:
+    - docker pull $IMAGE_TAG
+    - docker run --rm -v $(pwd):/app aquasec/trivy:latest image --severity HIGH,CRITICAL $IMAGE_TAG
+  only:
+    - triggers
+
+security:secrets-scanning:
+  <<: *security_template
+  stage: security
+  script:
+    - docker pull $IMAGE_TAG
+    - docker run --rm -v $(pwd):/app trufflesecurity/trufflehog:latest --json --regex --entropy=False /app
+  only:
+    - triggers
+
+compliance:policy-check:
+  stage: compliance
+  image: openpolicyagent/conftest:v0.30.0
+  script:
+    - conftest test --policy policies/ kubernetes/
+  only:
+    - triggers
+
+compliance:license-check:
+  stage: compliance
+  image: node:18-alpine
+  script:
+    - npm install -g license-checker
+    - license-checker --production --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD" --summary
+  only:
+    - triggers
+
+registry:harbor:
+  stage: registry
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - docker pull $IMAGE_TAG
+    - docker tag $IMAGE_TAG $HARBOR_REGISTRY/$HARBOR_PROJECT/$CI_PROJECT_NAME:$CI_COMMIT_SHORT_SHA
+    - docker tag $IMAGE_TAG $HARBOR_REGISTRY/$HARBOR_PROJECT/$CI_PROJECT_NAME:latest
+    - echo $HARBOR_PASSWORD | docker login $HARBOR_REGISTRY -u $HARBOR_USERNAME --password-stdin
+    - docker push $HARBOR_REGISTRY/$HARBOR_PROJECT/$CI_PROJECT_NAME:$CI_COMMIT_SHORT_SHA
+    - docker push $HARBOR_REGISTRY/$HARBOR_PROJECT/$CI_PROJECT_NAME:latest
+  only:
+    - triggers
+
+deploy:trigger-jenkins:
+  stage: deploy
+  image: curlimages/curl:7.83.1
+  script:
+    - |
+      curl -X POST \
+        --user $JENKINS_USER:$JENKINS_TOKEN \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "IMAGE_TAG=$HARBOR_REGISTRY/$HARBOR_PROJECT/$CI_PROJECT_NAME:$CI_COMMIT_SHORT_SHA" \
+        $JENKINS_URL/job/deploy-to-kubernetes/buildWithParameters
+  only:
+    - triggers

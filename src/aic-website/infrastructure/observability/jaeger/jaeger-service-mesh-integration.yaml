@@ -1,0 +1,849 @@
+# Jaeger Service Mesh Integration Configuration
+# This file contains configurations for integrating Jaeger with Istio, Linkerd, and Kong
+
+---
+# Istio Integration Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-istio-config
+  namespace: istio-system
+  labels:
+    app: jaeger
+    component: istio-integration
+data:
+  # Istio telemetry configuration for Jaeger
+  telemetry.yaml: |
+    apiVersion: telemetry.istio.io/v1alpha1
+    kind: Telemetry
+    metadata:
+      name: jaeger-tracing
+      namespace: istio-system
+    spec:
+      tracing:
+      - providers:
+          jaeger:
+            service: jaeger-collector.observability.svc.cluster.local
+            port: 14268
+      - randomSamplingPercentage: 10.0
+      - customTags:
+          cluster_name:
+            literal:
+              value: "aic-website"
+          environment:
+            environment:
+              name: ENVIRONMENT
+              defaultValue: "production"
+          version:
+            header:
+              name: "x-app-version"
+          user_id:
+            header:
+              name: "x-user-id"
+          request_id:
+            header:
+              name: "x-request-id"
+          source_app:
+            header:
+              name: "x-source-app"
+
+---
+# Istio Extension Provider for Jaeger
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: istio-jaeger-extension
+  namespace: istio-system
+data:
+  mesh: |
+    defaultConfig:
+      proxyStatsMatcher:
+        inclusionRegexps:
+        - ".*outlier_detection.*"
+        - ".*circuit_breakers.*"
+        - ".*upstream_rq_retry.*"
+        - ".*upstream_rq_pending.*"
+        - ".*_cx_.*"
+        exclusionRegexps:
+        - ".*osconfig.*"
+    extensionProviders:
+    - name: jaeger
+      envoyOtelAls:
+        service: jaeger-collector.observability.svc.cluster.local
+        port: 4317
+    - name: jaeger-http
+      envoyHttpAls:
+        service: jaeger-collector.observability.svc.cluster.local
+        port: 14268
+        path: "/api/traces"
+    tracing:
+      sampling: 10.0
+      maxPathTagLength: 256
+      customTags:
+        cluster_name:
+          literal:
+            value: "aic-website"
+        environment:
+          environment:
+            name: ENVIRONMENT
+            defaultValue: "production"
+
+---
+# Linkerd Integration Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-linkerd-config
+  namespace: linkerd
+  labels:
+    app: jaeger
+    component: linkerd-integration
+data:
+  # Linkerd configuration for Jaeger tracing
+  config.yaml: |
+    apiVersion: linkerd.io/v1alpha2
+    kind: TraceCollector
+    metadata:
+      name: jaeger
+      namespace: linkerd
+    spec:
+      collectorSvcAddr: jaeger-collector.observability.svc.cluster.local:14268
+      collectorSvcAccount: jaeger
+      samplingRate: 0.1
+      
+---
+# Linkerd ServiceProfile for Jaeger integration
+apiVersion: linkerd.io/v1alpha2
+kind: ServiceProfile
+metadata:
+  name: jaeger-collector
+  namespace: observability
+spec:
+  routes:
+  - name: jaeger-spans
+    condition:
+      method: POST
+      pathRegex: "/api/traces"
+    responseClasses:
+    - condition:
+        status:
+          min: 200
+          max: 299
+      isFailure: false
+    - condition:
+        status:
+          min: 500
+          max: 599
+      isFailure: true
+    timeout: 30s
+    retryBudget:
+      retryRatio: 0.2
+      minRetriesPerSecond: 10
+      ttl: 10s
+
+---
+# Kong Plugin for Jaeger Tracing
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: jaeger-tracing
+  namespace: kong
+plugin: opentracing
+config:
+  http_endpoint: "http://jaeger-collector.observability.svc.cluster.local:14268/api/traces"
+  sample_ratio: 0.1
+  include_credential: false
+  header_type: "jaeger"
+  default_header_type: "jaeger"
+  tags:
+    cluster: "aic-website"
+    environment: "production"
+    gateway: "kong"
+
+---
+# Kong Service for AIC Website with Jaeger tracing
+apiVersion: configuration.konghq.com/v1
+kind: KongIngress
+metadata:
+  name: aic-website-tracing
+  namespace: aic-website-prod
+route:
+  plugins:
+  - jaeger-tracing
+upstream:
+  healthchecks:
+    active:
+      healthy:
+        interval: 30
+        successes: 1
+      unhealthy:
+        interval: 30
+        http_failures: 3
+        tcp_failures: 3
+        timeouts: 3
+    passive:
+      healthy:
+        successes: 3
+      unhealthy:
+        http_failures: 3
+        tcp_failures: 3
+        timeouts: 3
+
+---
+# OpenTelemetry Collector Configuration for Jaeger
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-jaeger-config
+  namespace: observability
+  labels:
+    app: otel-collector
+    component: jaeger-integration
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      jaeger:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:14250
+          thrift_http:
+            endpoint: 0.0.0.0:14268
+          thrift_compact:
+            endpoint: 0.0.0.0:6831
+          thrift_binary:
+            endpoint: 0.0.0.0:6832
+      zipkin:
+        endpoint: 0.0.0.0:9411
+    
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 1024
+        send_batch_max_size: 2048
+      
+      resource:
+        attributes:
+        - key: cluster.name
+          value: "aic-website"
+          action: upsert
+        - key: environment
+          value: "production"
+          action: upsert
+      
+      attributes:
+        actions:
+        - key: http.user_agent
+          action: delete
+        - key: http.request.header.authorization
+          action: delete
+        - key: http.request.header.cookie
+          action: delete
+      
+      span:
+        name:
+          to_attributes:
+            rules:
+            - ^\/api\/v(\d+)\/.*
+        status:
+          rules:
+          - conditions:
+            - attributes["http.status_code"] >= 400
+            - attributes["http.status_code"] < 500
+            status: ERROR
+          - conditions:
+            - attributes["http.status_code"] >= 500
+            status: ERROR
+      
+      probabilistic_sampler:
+        sampling_percentage: 10.0
+        hash_seed: 22
+    
+    exporters:
+      jaeger:
+        endpoint: jaeger-collector.observability.svc.cluster.local:14250
+        tls:
+          insecure: false
+          ca_file: /etc/ssl/certs/ca-certificates.crt
+      
+      logging:
+        loglevel: info
+        sampling_initial: 5
+        sampling_thereafter: 200
+    
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      pprof:
+        endpoint: 0.0.0.0:1777
+      zpages:
+        endpoint: 0.0.0.0:55679
+    
+    service:
+      extensions: [health_check, pprof, zpages]
+      pipelines:
+        traces:
+          receivers: [otlp, jaeger, zipkin]
+          processors: [resource, attributes, span, probabilistic_sampler, batch]
+          exporters: [jaeger, logging]
+      
+      telemetry:
+        logs:
+          level: "info"
+        metrics:
+          address: 0.0.0.0:8888
+
+---
+# Service for OpenTelemetry Collector
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: observability
+  labels:
+    app: otel-collector
+    component: jaeger-integration
+spec:
+  type: ClusterIP
+  ports:
+  - name: otlp-grpc
+    port: 4317
+    targetPort: 4317
+    protocol: TCP
+  - name: otlp-http
+    port: 4318
+    targetPort: 4318
+    protocol: TCP
+  - name: jaeger-grpc
+    port: 14250
+    targetPort: 14250
+    protocol: TCP
+  - name: jaeger-http
+    port: 14268
+    targetPort: 14268
+    protocol: TCP
+  - name: jaeger-compact
+    port: 6831
+    targetPort: 6831
+    protocol: UDP
+  - name: jaeger-binary
+    port: 6832
+    targetPort: 6832
+    protocol: UDP
+  - name: zipkin
+    port: 9411
+    targetPort: 9411
+    protocol: TCP
+  - name: metrics
+    port: 8888
+    targetPort: 8888
+    protocol: TCP
+  - name: health
+    port: 13133
+    targetPort: 13133
+    protocol: TCP
+  selector:
+    app: otel-collector
+
+---
+# Deployment for OpenTelemetry Collector
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: observability
+  labels:
+    app: otel-collector
+    component: jaeger-integration
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8888"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: otel-collector
+      containers:
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib:0.89.0
+        command:
+        - /otelcol-contrib
+        - --config=/etc/otel-collector-config/config.yaml
+        ports:
+        - containerPort: 4317
+          name: otlp-grpc
+          protocol: TCP
+        - containerPort: 4318
+          name: otlp-http
+          protocol: TCP
+        - containerPort: 14250
+          name: jaeger-grpc
+          protocol: TCP
+        - containerPort: 14268
+          name: jaeger-http
+          protocol: TCP
+        - containerPort: 6831
+          name: jaeger-compact
+          protocol: UDP
+        - containerPort: 6832
+          name: jaeger-binary
+          protocol: UDP
+        - containerPort: 9411
+          name: zipkin
+          protocol: TCP
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        - containerPort: 13133
+          name: health
+          protocol: TCP
+        env:
+        - name: GOGC
+          value: "80"
+        - name: GOMEMLIMIT
+          value: "512MiB"
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 200m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: config
+          mountPath: /etc/otel-collector-config
+          readOnly: true
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: config
+        configMap:
+          name: otel-collector-jaeger-config
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+
+---
+# ServiceAccount for OpenTelemetry Collector
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-collector
+  namespace: observability
+  labels:
+    app: otel-collector
+
+---
+# Application Instrumentation ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-instrumentation-config
+  namespace: aic-website-prod
+  labels:
+    app: jaeger
+    component: instrumentation
+data:
+  # Node.js instrumentation
+  nodejs-tracing.js: |
+    const { NodeSDK } = require('@opentelemetry/sdk-node');
+    const { JaegerExporter } = require('@opentelemetry/exporter-jaeger');
+    const { Resource } = require('@opentelemetry/resources');
+    const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
+    const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
+    
+    const jaegerExporter = new JaegerExporter({
+      endpoint: 'http://jaeger-collector.observability.svc.cluster.local:14268/api/traces',
+    });
+    
+    const sdk = new NodeSDK({
+      resource: new Resource({
+        [SemanticResourceAttributes.SERVICE_NAME]: process.env.SERVICE_NAME || 'aic-website',
+        [SemanticResourceAttributes.SERVICE_VERSION]: process.env.SERVICE_VERSION || '1.0.0',
+        [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.ENVIRONMENT || 'production',
+        'cluster.name': 'aic-website',
+      }),
+      traceExporter: jaegerExporter,
+      instrumentations: [getNodeAutoInstrumentations({
+        '@opentelemetry/instrumentation-fs': {
+          enabled: false,
+        },
+        '@opentelemetry/instrumentation-http': {
+          enabled: true,
+          ignoreIncomingRequestHook: (req) => {
+            return req.url?.includes('/health') || req.url?.includes('/metrics');
+          },
+        },
+        '@opentelemetry/instrumentation-express': {
+          enabled: true,
+        },
+        '@opentelemetry/instrumentation-pg': {
+          enabled: true,
+        },
+        '@opentelemetry/instrumentation-redis': {
+          enabled: true,
+        },
+      })],
+    });
+    
+    sdk.start();
+    
+    process.on('SIGTERM', () => {
+      sdk.shutdown()
+        .then(() => console.log('Tracing terminated'))
+        .catch((error) => console.log('Error terminating tracing', error))
+        .finally(() => process.exit(0));
+    });
+  
+  # Python instrumentation
+  python-tracing.py: |
+    import os
+    from opentelemetry import trace
+    from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.instrumentation.auto_instrumentation import sitecustomize
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor
+    from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
+    from opentelemetry.instrumentation.redis import RedisInstrumentor
+    from opentelemetry.instrumentation.flask import FlaskInstrumentor
+    from opentelemetry.instrumentation.django import DjangoInstrumentor
+    
+    # Configure resource
+    resource = Resource.create({
+        "service.name": os.getenv("SERVICE_NAME", "aic-website"),
+        "service.version": os.getenv("SERVICE_VERSION", "1.0.0"),
+        "deployment.environment": os.getenv("ENVIRONMENT", "production"),
+        "cluster.name": "aic-website",
+    })
+    
+    # Configure tracer
+    trace.set_tracer_provider(TracerProvider(resource=resource))
+    tracer = trace.get_tracer(__name__)
+    
+    # Configure Jaeger exporter
+    jaeger_exporter = JaegerExporter(
+        agent_host_name="jaeger-agent.observability.svc.cluster.local",
+        agent_port=6831,
+    )
+    
+    # Configure span processor
+    span_processor = BatchSpanProcessor(jaeger_exporter)
+    trace.get_tracer_provider().add_span_processor(span_processor)
+    
+    # Auto-instrument libraries
+    RequestsInstrumentor().instrument()
+    Psycopg2Instrumentor().instrument()
+    RedisInstrumentor().instrument()
+    FlaskInstrumentor().instrument()
+    DjangoInstrumentor().instrument()
+  
+  # Java instrumentation
+  java-tracing.properties: |
+    # OpenTelemetry Java Agent configuration
+    otel.service.name=${SERVICE_NAME:aic-website}
+    otel.service.version=${SERVICE_VERSION:1.0.0}
+    otel.resource.attributes=deployment.environment=${ENVIRONMENT:production},cluster.name=aic-website
+    
+    # Jaeger exporter configuration
+    otel.exporter.jaeger.endpoint=http://jaeger-collector.observability.svc.cluster.local:14268/api/traces
+    otel.exporter.jaeger.timeout=10s
+    
+    # Sampling configuration
+    otel.traces.sampler=parentbased_traceidratio
+    otel.traces.sampler.arg=0.1
+    
+    # Instrumentation configuration
+    otel.instrumentation.http.capture-headers.client.request=x-request-id,x-user-id,x-correlation-id
+    otel.instrumentation.http.capture-headers.client.response=x-response-time
+    otel.instrumentation.http.capture-headers.server.request=x-request-id,x-user-id,x-correlation-id
+    otel.instrumentation.http.capture-headers.server.response=x-response-time
+    
+    # Database instrumentation
+    otel.instrumentation.jdbc.statement-sanitizer.enabled=true
+    otel.instrumentation.redis.capture-experimental-span-attributes=true
+    
+    # Logging configuration
+    otel.javaagent.logging=simple
+    otel.javaagent.debug=false
+
+---
+# Jaeger Sampling Strategy ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-sampling-strategies
+  namespace: observability
+  labels:
+    app: jaeger
+    component: sampling
+data:
+  strategies.json: |
+    {
+      "service_strategies": [
+        {
+          "service": "aic-website-frontend",
+          "type": "probabilistic",
+          "param": 0.5,
+          "max_traces_per_second": 100,
+          "operation_strategies": [
+            {
+              "operation": "GET /health",
+              "type": "probabilistic",
+              "param": 0.01
+            },
+            {
+              "operation": "GET /metrics",
+              "type": "probabilistic",
+              "param": 0.01
+            },
+            {
+              "operation": "POST /api/auth/login",
+              "type": "probabilistic",
+              "param": 1.0
+            },
+            {
+              "operation": "GET /api/user/profile",
+              "type": "probabilistic",
+              "param": 0.8
+            }
+          ]
+        },
+        {
+          "service": "aic-website-api",
+          "type": "probabilistic",
+          "param": 0.8,
+          "max_traces_per_second": 200,
+          "operation_strategies": [
+            {
+              "operation": "GET /health",
+              "type": "probabilistic",
+              "param": 0.01
+            },
+            {
+              "operation": "GET /metrics",
+              "type": "probabilistic",
+              "param": 0.01
+            },
+            {
+              "operation": "POST /api/users",
+              "type": "probabilistic",
+              "param": 1.0
+            },
+            {
+              "operation": "GET /api/users/*",
+              "type": "probabilistic",
+              "param": 0.5
+            },
+            {
+              "operation": "PUT /api/users/*",
+              "type": "probabilistic",
+              "param": 1.0
+            },
+            {
+              "operation": "DELETE /api/users/*",
+              "type": "probabilistic",
+              "param": 1.0
+            }
+          ]
+        },
+        {
+          "service": "aic-website-auth",
+          "type": "probabilistic",
+          "param": 1.0,
+          "max_traces_per_second": 50
+        },
+        {
+          "service": "aic-website-cms",
+          "type": "probabilistic",
+          "param": 0.3,
+          "max_traces_per_second": 30,
+          "operation_strategies": [
+            {
+              "operation": "GET /admin/*",
+              "type": "probabilistic",
+              "param": 0.8
+            },
+            {
+              "operation": "POST /admin/*",
+              "type": "probabilistic",
+              "param": 1.0
+            }
+          ]
+        },
+        {
+          "service": "postgres",
+          "type": "probabilistic",
+          "param": 0.2,
+          "max_traces_per_second": 20
+        },
+        {
+          "service": "redis",
+          "type": "probabilistic",
+          "param": 0.1,
+          "max_traces_per_second": 10
+        },
+        {
+          "service": "kong",
+          "type": "probabilistic",
+          "param": 0.3,
+          "max_traces_per_second": 100,
+          "operation_strategies": [
+            {
+              "operation": "GET /health",
+              "type": "probabilistic",
+              "param": 0.01
+            }
+          ]
+        },
+        {
+          "service": "istio-proxy",
+          "type": "probabilistic",
+          "param": 0.1,
+          "max_traces_per_second": 50
+        }
+      ],
+      "default_strategy": {
+        "type": "probabilistic",
+        "param": 0.1,
+        "max_traces_per_second": 50
+      },
+      "per_operation_strategies": [
+        {
+          "service": "*",
+          "operation": "GET /health",
+          "type": "probabilistic",
+          "param": 0.01
+        },
+        {
+          "service": "*",
+          "operation": "GET /metrics",
+          "type": "probabilistic",
+          "param": 0.01
+        },
+        {
+          "service": "*",
+          "operation": "GET /ready",
+          "type": "probabilistic",
+          "param": 0.01
+        },
+        {
+          "service": "*",
+          "operation": "GET /live",
+          "type": "probabilistic",
+          "param": 0.01
+        }
+      ]
+    }
+
+---
+# Network Policy for Service Mesh Integration
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jaeger-service-mesh-access
+  namespace: observability
+spec:
+  podSelector:
+    matchLabels:
+      app: jaeger
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from Istio sidecars
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: aic-website-prod
+    - namespaceSelector:
+        matchLabels:
+          name: aic-website-staging
+    - namespaceSelector:
+        matchLabels:
+          name: aic-website-dev
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - namespaceSelector:
+        matchLabels:
+          name: linkerd
+    - namespaceSelector:
+        matchLabels:
+          name: kong
+    ports:
+    - protocol: TCP
+      port: 14250  # Collector gRPC
+    - protocol: TCP
+      port: 14268  # Collector HTTP
+    - protocol: TCP
+      port: 4317   # OTLP gRPC
+    - protocol: TCP
+      port: 4318   # OTLP HTTP
+    - protocol: UDP
+      port: 6831   # Agent compact
+    - protocol: UDP
+      port: 6832   # Agent binary
+    - protocol: TCP
+      port: 5775   # Agent Zipkin
+  
+  # Allow traffic from OpenTelemetry Collector
+  - from:
+    - podSelector:
+        matchLabels:
+          app: otel-collector
+    ports:
+    - protocol: TCP
+      port: 14250
+    - protocol: TCP
+      port: 14268
+  
+  egress:
+  # Allow access to Elasticsearch
+  - to:
+    - podSelector:
+        matchLabels:
+          app: elasticsearch
+    ports:
+    - protocol: TCP
+      port: 9200
+  
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53

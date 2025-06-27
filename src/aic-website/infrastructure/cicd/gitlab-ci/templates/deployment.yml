@@ -1,0 +1,105 @@
+# Deployment Template for GitLab CI
+# Include this template in your .gitlab-ci.yml file:
+# include:
+#   - local: /infrastructure/cicd/gitlab-ci/templates/deployment.yml
+
+# Kubernetes setup
+.kubernetes-setup: &kubernetes-setup
+  image: bitnami/kubectl:latest
+  before_script:
+    - mkdir -p /etc/deploy
+    - echo "${KUBE_CONFIG}" | base64 -d > ${KUBECONFIG}
+    - kubectl version
+
+# Development Deployment
+deploy-dev:
+  stage: deploy
+  <<: *kubernetes-setup
+  environment:
+    name: development
+    url: https://dev.example.com
+  script:
+    - cd src/aic-website/infrastructure/kubernetes
+    - |
+      # Update image tags in Kustomize files
+      sed -i "s|image: $CI_REGISTRY_IMAGE/frontend:.*|image: $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA|" overlays/dev/frontend/kustomization.yaml
+      sed -i "s|image: $CI_REGISTRY_IMAGE/backend:.*|image: $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA|" overlays/dev/backend/kustomization.yaml
+      sed -i "s|image: $CI_REGISTRY_IMAGE/ai-services:.*|image: $CI_REGISTRY_IMAGE/ai-services:$CI_COMMIT_SHA|" overlays/dev/ai-services/kustomization.yaml
+    - kubectl apply -k overlays/dev
+    - kubectl rollout status deployment/frontend -n frontend
+    - kubectl rollout status deployment/backend -n backend-services
+    - kubectl rollout status deployment/ai-services -n ai-services
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Staging Deployment
+deploy-staging:
+  stage: deploy
+  <<: *kubernetes-setup
+  environment:
+    name: staging
+    url: https://staging.example.com
+  script:
+    - cd src/aic-website/infrastructure/kubernetes
+    - |
+      # Update image tags in Kustomize files
+      sed -i "s|image: $CI_REGISTRY_IMAGE/frontend:.*|image: $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA|" overlays/staging/frontend/kustomization.yaml
+      sed -i "s|image: $CI_REGISTRY_IMAGE/backend:.*|image: $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA|" overlays/staging/backend/kustomization.yaml
+      sed -i "s|image: $CI_REGISTRY_IMAGE/ai-services:.*|image: $CI_REGISTRY_IMAGE/ai-services:$CI_COMMIT_SHA|" overlays/staging/ai-services/kustomization.yaml
+    - kubectl apply -k overlays/staging
+    - kubectl rollout status deployment/frontend -n frontend
+    - kubectl rollout status deployment/backend -n backend-services
+    - kubectl rollout status deployment/ai-services -n ai-services
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+
+# Trigger Jenkins for Production Deployment
+trigger-jenkins-production-deploy:
+  stage: deploy
+  image: curlimages/curl:latest
+  environment:
+    name: production
+    url: https://www.example.com
+  script:
+    - |
+      curl -X POST \
+        --user "${JENKINS_USER}:${JENKINS_TOKEN}" \
+        --data "IMAGE_TAG=${CI_COMMIT_SHA}" \
+        --data "ENVIRONMENT=production" \
+        "${JENKINS_URL}/job/aic-website-production-deploy/buildWithParameters"
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+      when: manual
+
+# Update ArgoCD GitOps Repository
+update-gitops-repo:
+  stage: deploy
+  image: alpine:latest
+  variables:
+    GIT_STRATEGY: none
+  before_script:
+    - apk add --no-cache git openssh-client
+    - mkdir -p ~/.ssh
+    - echo "$GITOPS_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H gitlab.com >> ~/.ssh/known_hosts
+    - git config --global user.email "gitlab-ci@example.com"
+    - git config --global user.name "GitLab CI"
+  script:
+    - git clone git@gitlab.com:aic-website/gitops.git
+    - cd gitops
+    - |
+      # Update image tags in Kustomize files
+      sed -i "s|image: $CI_REGISTRY_IMAGE/frontend:.*|image: $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA|" apps/frontend/overlays/$ENVIRONMENT/kustomization.yaml
+      sed -i "s|image: $CI_REGISTRY_IMAGE/backend:.*|image: $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA|" apps/backend/overlays/$ENVIRONMENT/kustomization.yaml
+      sed -i "s|image: $CI_REGISTRY_IMAGE/ai-services:.*|image: $CI_REGISTRY_IMAGE/ai-services:$CI_COMMIT_SHA|" apps/ai-services/overlays/$ENVIRONMENT/kustomization.yaml
+    - git add .
+    - git commit -m "Update image tags for $ENVIRONMENT environment [skip ci]" || echo "No changes to commit"
+    - git push
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $ENVIRONMENT == "dev"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $ENVIRONMENT == "staging"
+      when: manual
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/ && $ENVIRONMENT == "production"
+      when: manual

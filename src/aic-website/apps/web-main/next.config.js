@@ -4,15 +4,10 @@ const nextConfig = {
   swcMinify: true,
   experimental: {
     appDir: true,
-    serverComponentsExternalPackages: ['@aic/ui'],
   },
-  transpilePackages: ['@aic/ui', '@aic/auth', '@aic/ai-sdk', '@aic/utils'],
   images: {
     domains: ['images.unsplash.com', 'via.placeholder.com'],
     formats: ['image/webp', 'image/avif'],
-  },
-  env: {
-    CUSTOM_KEY: process.env.CUSTOM_KEY,
   },
   async headers() {
     return [
@@ -27,20 +22,7 @@ const nextConfig = {
             key: 'X-Content-Type-Options',
             value: 'nosniff',
           },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
         ],
-      },
-    ]
-  },
-  async redirects() {
-    return [
-      {
-        source: '/home',
-        destination: '/',
-        permanent: true,
       },
     ]
   },

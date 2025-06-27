@@ -1,0 +1,70 @@
+image:
+  repository: kong
+  tag: "3.4"
+
+env:
+  database: "postgres"
+  pg_host: "aic-website-db.default.svc.cluster.local"
+  pg_user: "kong"
+  pg_password: "kong"
+  pg_database: "kong"
+
+admin:
+  enabled: true
+  http:
+    enabled: true
+    servicePort: 8001
+    containerPort: 8001
+  tls:
+    enabled: true
+    servicePort: 8444
+    containerPort: 8444
+
+proxy:
+  enabled: true
+  type: LoadBalancer
+  http:
+    enabled: true
+    servicePort: 80
+    containerPort: 8000
+  tls:
+    enabled: true
+    servicePort: 443
+    containerPort: 8443
+
+ingressController:
+  enabled: true
+  installCRDs: false
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+serviceMonitor:
+  enabled: true
+  labels:
+    release: prometheus
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+
+podAnnotations:
+  kuma.io/mesh: default
+  kuma.io/gateway: enabled
+
+plugins:
+  configMaps:
+    - name: kong-plugins
+      pluginName: prometheus
+      data:
+        status_code_metrics: true
+        latency_metrics: true
+        bandwidth_metrics: true
+        upstream_health_metrics: true

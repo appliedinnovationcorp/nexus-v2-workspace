@@ -1,0 +1,184 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-services-config
+  namespace: ai-services
+  labels:
+    app: ai-services
+    part-of: aic-website
+data:
+  app-config.json: |
+    {
+      "ai": {
+        "providers": {
+          "openai": {
+            "enabled": true,
+            "baseUrl": "https://api.openai.com/v1",
+            "models": {
+              "chat": "gpt-4-turbo-preview",
+              "embedding": "text-embedding-3-large",
+              "vision": "gpt-4-vision-preview"
+            },
+            "maxTokens": 4096,
+            "temperature": 0.7,
+            "timeout": 30000
+          },
+          "ollama": {
+            "enabled": true,
+            "baseUrl": "http://ollama:11434",
+            "models": {
+              "chat": "llama3:8b",
+              "embedding": "nomic-embed-text",
+              "code": "codellama:7b"
+            },
+            "maxTokens": 2048,
+            "temperature": 0.5,
+            "timeout": 60000
+          },
+          "anthropic": {
+            "enabled": false,
+            "baseUrl": "https://api.anthropic.com",
+            "models": {
+              "chat": "claude-3-opus-20240229"
+            },
+            "maxTokens": 4096,
+            "temperature": 0.7,
+            "timeout": 30000
+          }
+        },
+        "fallback": {
+          "enabled": true,
+          "order": ["openai", "ollama", "anthropic"],
+          "retryAttempts": 3,
+          "retryDelay": 1000
+        },
+        "caching": {
+          "enabled": true,
+          "ttl": 3600,
+          "maxSize": "100MB",
+          "strategy": "lru"
+        },
+        "rateLimit": {
+          "enabled": true,
+          "requests": {
+            "perMinute": 100,
+            "perHour": 1000,
+            "perDay": 10000
+          },
+          "tokens": {
+            "perMinute": 50000,
+            "perHour": 500000,
+            "perDay": 2000000
+          }
+        }
+      },
+      "vectorStore": {
+        "provider": "meilisearch",
+        "config": {
+          "host": "http://meilisearch:7700",
+          "indexPrefix": "aic_",
+          "batchSize": 100,
+          "dimensions": 1536,
+          "similarity": "cosine"
+        }
+      },
+      "processing": {
+        "concurrent": {
+          "maxJobs": 10,
+          "queueSize": 100,
+          "timeout": 300000
+        },
+        "chunking": {
+          "maxSize": 1000,
+          "overlap": 200,
+          "strategy": "semantic"
+        },
+        "embedding": {
+          "batchSize": 50,
+          "retryAttempts": 3,
+          "cacheResults": true
+        }
+      },
+      "logging": {
+        "level": "info",
+        "format": "json",
+        "includeTokenUsage": true,
+        "includeLatency": true,
+        "sanitizeInputs": true
+      },
+      "monitoring": {
+        "metrics": {
+          "enabled": true,
+          "interval": 30,
+          "includeTokenCounts": true,
+          "includeCosts": true
+        },
+        "tracing": {
+          "enabled": true,
+          "sampleRate": 0.1,
+          "includeInputs": false
+        }
+      }
+    }
+  
+  model-config.json: |
+    {
+      "models": {
+        "chat": {
+          "primary": "gpt-4-turbo-preview",
+          "fallback": "llama3:8b",
+          "systemPrompts": {
+            "default": "You are a helpful AI assistant for Applied Innovation Corporation.",
+            "technical": "You are a technical AI assistant specializing in enterprise software solutions.",
+            "sales": "You are a sales AI assistant helping with lead qualification and customer inquiries."
+          }
+        },
+        "embedding": {
+          "primary": "text-embedding-3-large",
+          "fallback": "nomic-embed-text",
+          "dimensions": 1536,
+          "normalization": true
+        },
+        "vision": {
+          "primary": "gpt-4-vision-preview",
+          "maxImageSize": "20MB",
+          "supportedFormats": ["jpg", "jpeg", "png", "gif", "webp"]
+        },
+        "code": {
+          "primary": "codellama:7b",
+          "languages": ["javascript", "typescript", "python", "go", "rust", "java"],
+          "maxContextLength": 4096
+        }
+      },
+      "presets": {
+        "creative": {
+          "temperature": 0.9,
+          "topP": 0.95,
+          "frequencyPenalty": 0.1
+        },
+        "balanced": {
+          "temperature": 0.7,
+          "topP": 0.9,
+          "frequencyPenalty": 0.0
+        },
+        "precise": {
+          "temperature": 0.3,
+          "topP": 0.8,
+          "frequencyPenalty": 0.0
+        }
+      }
+    }
+  
+  feature-flags.json: |
+    {
+      "enableAdvancedRAG": true,
+      "enableMultiModalProcessing": true,
+      "enableRealtimeProcessing": false,
+      "enableCustomModels": false,
+      "enableA/BTesting": true,
+      "enableCostOptimization": true,
+      "enableAdvancedCaching": true,
+      "enableStreamingResponses": true,
+      "enableBatchProcessing": true,
+      "enableModelFinetuning": false
+    }

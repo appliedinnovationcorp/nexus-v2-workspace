@@ -1,0 +1,737 @@
+components:
+  securitySchemes:
+    AdminAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Admin API Key
+
+    ContentAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Content API Key
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Page number
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    
+    LimitParam:
+      name: limit
+      in: query
+      description: Number of items per page
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 15
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              message:
+                type: string
+              type:
+                type: string
+              details:
+                type: object
+                additionalProperties: true
+            required:
+              - message
+              - type
+      required:
+        - errors
+
+    SessionRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+
+    SessionResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        expires:
+          type: string
+          format: date-time
+      required:
+        - token
+        - expires
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        uuid:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        html:
+          type: string
+        comment_id:
+          type: string
+        feature_image:
+          type: string
+          format: uri
+        featured:
+          type: boolean
+        status:
+          type: string
+          enum: [draft, published, scheduled]
+        visibility:
+          type: string
+          enum: [public, members, paid]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        published_at:
+          type: string
+          format: date-time
+        custom_excerpt:
+          type: string
+        codeinjection_head:
+          type: string
+        codeinjection_foot:
+          type: string
+        custom_template:
+          type: string
+        canonical_url:
+          type: string
+          format: uri
+        authors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Author'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        primary_author:
+          $ref: '#/components/schemas/Author'
+        primary_tag:
+          $ref: '#/components/schemas/Tag'
+        url:
+          type: string
+          format: uri
+        excerpt:
+          type: string
+        reading_time:
+          type: integer
+        og_image:
+          type: string
+          format: uri
+        og_title:
+          type: string
+        og_description:
+          type: string
+        twitter_image:
+          type: string
+          format: uri
+        twitter_title:
+          type: string
+        twitter_description:
+          type: string
+        meta_title:
+          type: string
+        meta_description:
+          type: string
+      required:
+        - id
+        - uuid
+        - title
+        - slug
+        - html
+        - status
+        - created_at
+        - updated_at
+
+    PostRequest:
+      type: object
+      properties:
+        posts:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              slug:
+                type: string
+              html:
+                type: string
+              status:
+                type: string
+                enum: [draft, published, scheduled]
+              featured:
+                type: boolean
+              published_at:
+                type: string
+                format: date-time
+              custom_excerpt:
+                type: string
+              codeinjection_head:
+                type: string
+              codeinjection_foot:
+                type: string
+              custom_template:
+                type: string
+              canonical_url:
+                type: string
+                format: uri
+              authors:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+              tags:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+              og_image:
+                type: string
+                format: uri
+              og_title:
+                type: string
+              og_description:
+                type: string
+              twitter_image:
+                type: string
+                format: uri
+              twitter_title:
+                type: string
+              twitter_description:
+                type: string
+              meta_title:
+                type: string
+              meta_description:
+                type: string
+            required:
+              - title
+      required:
+        - posts
+
+    PostResponse:
+      type: object
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Post'
+      required:
+        - posts
+
+    PostsResponse:
+      type: object
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Post'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      required:
+        - posts
+        - meta
+
+    Page:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        uuid:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        html:
+          type: string
+        comment_id:
+          type: string
+        feature_image:
+          type: string
+          format: uri
+        featured:
+          type: boolean
+        status:
+          type: string
+          enum: [draft, published, scheduled]
+        visibility:
+          type: string
+          enum: [public, members, paid]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        published_at:
+          type: string
+          format: date-time
+        custom_excerpt:
+          type: string
+        codeinjection_head:
+          type: string
+        codeinjection_foot:
+          type: string
+        custom_template:
+          type: string
+        canonical_url:
+          type: string
+          format: uri
+        authors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Author'
+        primary_author:
+          $ref: '#/components/schemas/Author'
+        url:
+          type: string
+          format: uri
+        excerpt:
+          type: string
+        reading_time:
+          type: integer
+        og_image:
+          type: string
+          format: uri
+        og_title:
+          type: string
+        og_description:
+          type: string
+        twitter_image:
+          type: string
+          format: uri
+        twitter_title:
+          type: string
+        twitter_description:
+          type: string
+        meta_title:
+          type: string
+        meta_description:
+          type: string
+      required:
+        - id
+        - uuid
+        - title
+        - slug
+        - html
+        - status
+        - created_at
+        - updated_at
+
+    PageRequest:
+      type: object
+      properties:
+        pages:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              slug:
+                type: string
+              html:
+                type: string
+              status:
+                type: string
+                enum: [draft, published, scheduled]
+              featured:
+                type: boolean
+              published_at:
+                type: string
+                format: date-time
+              custom_excerpt:
+                type: string
+              codeinjection_head:
+                type: string
+              codeinjection_foot:
+                type: string
+              custom_template:
+                type: string
+              canonical_url:
+                type: string
+                format: uri
+              authors:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+              og_image:
+                type: string
+                format: uri
+              og_title:
+                type: string
+              og_description:
+                type: string
+              twitter_image:
+                type: string
+                format: uri
+              twitter_title:
+                type: string
+              twitter_description:
+                type: string
+              meta_title:
+                type: string
+              meta_description:
+                type: string
+            required:
+              - title
+      required:
+        - pages
+
+    PageResponse:
+      type: object
+      properties:
+        pages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Page'
+      required:
+        - pages
+
+    PagesResponse:
+      type: object
+      properties:
+        pages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Page'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      required:
+        - pages
+        - meta
+
+    Author:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        email:
+          type: string
+          format: email
+        profile_image:
+          type: string
+          format: uri
+        cover_image:
+          type: string
+          format: uri
+        bio:
+          type: string
+        website:
+          type: string
+          format: uri
+        location:
+          type: string
+        facebook:
+          type: string
+        twitter:
+          type: string
+        meta_title:
+          type: string
+        meta_description:
+          type: string
+        url:
+          type: string
+          format: uri
+      required:
+        - id
+        - name
+        - slug
+
+    AuthorResponse:
+      type: object
+      properties:
+        authors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Author'
+      required:
+        - authors
+
+    AuthorsResponse:
+      type: object
+      properties:
+        authors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Author'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      required:
+        - authors
+        - meta
+
+    Tag:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        feature_image:
+          type: string
+          format: uri
+        visibility:
+          type: string
+          enum: [public, internal]
+        meta_title:
+          type: string
+        meta_description:
+          type: string
+        url:
+          type: string
+          format: uri
+      required:
+        - id
+        - name
+        - slug
+
+    TagRequest:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              slug:
+                type: string
+              description:
+                type: string
+              feature_image:
+                type: string
+                format: uri
+              visibility:
+                type: string
+                enum: [public, internal]
+              meta_title:
+                type: string
+              meta_description:
+                type: string
+            required:
+              - name
+      required:
+        - tags
+
+    TagResponse:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+      required:
+        - tags
+
+    TagsResponse:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      required:
+        - tags
+        - meta
+
+    Image:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        alt:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        size:
+          type: integer
+        mime_type:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - url
+        - width
+        - height
+        - size
+        - mime_type
+        - created_at
+
+    ImageResponse:
+      type: object
+      properties:
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/Image'
+      required:
+        - images
+
+    Settings:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        logo:
+          type: string
+          format: uri
+        icon:
+          type: string
+          format: uri
+        cover_image:
+          type: string
+          format: uri
+        facebook:
+          type: string
+        twitter:
+          type: string
+        lang:
+          type: string
+        timezone:
+          type: string
+        navigation:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              url:
+                type: string
+                format: uri
+            required:
+              - label
+              - url
+        meta_title:
+          type: string
+        meta_description:
+          type: string
+        og_image:
+          type: string
+          format: uri
+        og_title:
+          type: string
+        og_description:
+          type: string
+        twitter_image:
+          type: string
+          format: uri
+        twitter_title:
+          type: string
+        twitter_description:
+          type: string
+      required:
+        - title
+
+    SettingsRequest:
+      type: object
+      properties:
+        settings:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              value:
+                type: string
+            required:
+              - key
+              - value
+      required:
+        - settings
+
+    SettingsResponse:
+      type: object
+      properties:
+        settings:
+          $ref: '#/components/schemas/Settings'
+      required:
+        - settings
+
+    Meta:
+      type: object
+      properties:
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            pages:
+              type: integer
+            total:
+              type: integer
+            next:
+              type: integer
+              nullable: true
+            prev:
+              type: integer
+              nullable: true
+          required:
+            - page
+            - limit
+            - pages
+            - total
+      required:
+        - pagination

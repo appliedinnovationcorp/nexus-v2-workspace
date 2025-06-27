@@ -1,0 +1,336 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  labels:
+    app: notification-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+        version: v1
+    spec:
+      containers:
+      - name: notification-service
+        image: ghcr.io/aic-website/notification-service:latest
+        ports:
+        - containerPort: 8003
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: redis-url
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: smtp-host
+        - name: SMTP_PORT
+          value: "587"
+        - name: SMTP_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: smtp-username
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: smtp-password
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: aws-secret-access-key
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: FROM_EMAIL
+          value: "noreply@aic-website.com"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+          value: "http://jaeger-collector:14268/api/traces"
+        - name: OTEL_SERVICE_NAME
+          value: "notification-service"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: vault-secrets
+          mountPath: /vault/secrets
+          readOnly: true
+      volumes:
+      - name: vault-secrets
+        csi:
+          driver: secrets-store.csi.x-k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "notification-service-vault-secrets"
+      serviceAccountName: notification-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker
+  labels:
+    app: notification-worker
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: notification-worker
+  template:
+    metadata:
+      labels:
+        app: notification-worker
+        version: v1
+    spec:
+      containers:
+      - name: notification-worker
+        image: ghcr.io/aic-website/notification-service:latest
+        command: ["python", "-m", "worker"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: redis-url
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: smtp-host
+        - name: SMTP_PORT
+          value: "587"
+        - name: SMTP_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: smtp-username
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: smtp-password
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: aws-secret-access-key
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: FROM_EMAIL
+          value: "noreply@aic-website.com"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+          value: "http://jaeger-collector:14268/api/traces"
+        - name: OTEL_SERVICE_NAME
+          value: "notification-worker"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: vault-secrets
+          mountPath: /vault/secrets
+          readOnly: true
+      volumes:
+      - name: vault-secrets
+        csi:
+          driver: secrets-store.csi.x-k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "notification-service-vault-secrets"
+      serviceAccountName: notification-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  labels:
+    app: notification-service
+spec:
+  selector:
+    app: notification-service
+  ports:
+  - port: 80
+    targetPort: 8003
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notification-service
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "notification-service"
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/notification-service-role
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: notification-service-secrets
+type: Opaque
+data:
+  database-url: cG9zdGdyZXNxbDovL3VzZXI6cGFzc3dvcmRAbG9jYWxob3N0OjU0MzIvbm90aWZpY2F0aW9uX2Ri
+  redis-url: cmVkaXM6Ly9sb2NhbGhvc3Q6NjM3OQ==
+  smtp-host: c210cC5nbWFpbC5jb20=
+  smtp-username: eW91ci1lbWFpbEBnbWFpbC5jb20=
+  smtp-password: eW91ci1hcHAtcGFzc3dvcmQ=
+  aws-access-key-id: QUtJQUlPU0ZPRE5ON0VYQU1QTEU=
+  aws-secret-access-key: d0phbHJYVXRuRkVNSS9LN01ERU5HL2JQeFJmaUNZRVhBTVBMRUtFWQ==
+---
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: notification-service-vault-secrets
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: "http://vault:8200"
+    roleName: "notification-service"
+    objects: |
+      - objectName: "database-url"
+        secretPath: "secret/notification-service"
+        secretKey: "database-url"
+      - objectName: "redis-url"
+        secretPath: "secret/notification-service"
+        secretKey: "redis-url"
+      - objectName: "smtp-host"
+        secretPath: "secret/notification-service"
+        secretKey: "smtp-host"
+      - objectName: "smtp-username"
+        secretPath: "secret/notification-service"
+        secretKey: "smtp-username"
+      - objectName: "smtp-password"
+        secretPath: "secret/notification-service"
+        secretKey: "smtp-password"
+      - objectName: "aws-access-key-id"
+        secretPath: "secret/notification-service"
+        secretKey: "aws-access-key-id"
+      - objectName: "aws-secret-access-key"
+        secretPath: "secret/notification-service"
+        secretKey: "aws-secret-access-key"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: notification-service-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: notification-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: notification-worker-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: notification-worker
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-service-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: notification-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-worker-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: notification-worker

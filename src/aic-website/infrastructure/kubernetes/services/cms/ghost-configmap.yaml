@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ghost-cms-config
+  namespace: cms
+  labels:
+    app: ghost-cms
+    part-of: aic-website
+data:
+  # Ghost CMS Configuration
+  ghost-config.json: |
+    {
+      "url": "https://cms.aicorp.com",
+      "server": {
+        "port": 2368,
+        "host": "0.0.0.0"
+      },
+      "database": {
+        "client": "mysql",
+        "connection": {
+          "host": "ghost-mysql.cms.svc.cluster.local",
+          "port": 3306,
+          "database": "ghost_production",
+          "ssl": true
+        },
+        "pool": {
+          "min": 2,
+          "max": 10
+        }
+      },
+      "mail": {
+        "transport": "SMTP",
+        "options": {
+          "service": "Mailgun",
+          "host": "smtp.mailgun.org",
+          "port": 587,
+          "secure": false
+        }
+      },
+      "logging": {
+        "level": "info",
+        "transports": ["file", "stdout"]
+      },
+      "paths": {
+        "contentPath": "/var/lib/ghost/content"
+      },
+      "imageOptimization": {
+        "resize": true,
+        "quality": 80,
+        "formats": ["webp", "jpg"]
+      },
+      "caching": {
+        "frontend": {
+          "maxAge": 600
+        },
+        "admin": {
+          "maxAge": 0
+        }
+      }
+    }
+  
+  # Performance and scaling configuration
+  performance-config.json: |
+    {
+      "clustering": {
+        "enabled": true,
+        "workers": "auto"
+      },
+      "caching": {
+        "redis": {
+          "host": "redis.cms.svc.cluster.local",
+          "port": 6379,
+          "keyPrefix": "ghost:",
+          "ttl": 3600
+        }
+      },
+      "cdn": {
+        "enabled": true,
+        "baseUrl": "https://cdn.aicorp.com"
+      },
+      "compression": {
+        "enabled": true,
+        "level": 6
+      }
+    }
+  
+  # Custom metrics configuration for HPA
+  metrics-config.json: |
+    {
+      "prometheus": {
+        "enabled": true,
+        "port": 9090,
+        "path": "/metrics"
+      },
+      "customMetrics": {
+        "requestsPerSecond": {
+          "enabled": true,
+          "threshold": 50
+        },
+        "activeConnections": {
+          "enabled": true,
+          "threshold": 100
+        },
+        "responseTime": {
+          "enabled": true,
+          "threshold": 2000
+        }
+      }
+    }

@@ -1,0 +1,178 @@
+---
+# Elasticsearch Helm values for AIC Website
+# Based on the Elastic Helm chart
+
+# Cluster settings
+clusterName: "aic-elasticsearch"
+nodeGroup: "master"
+
+# The service that non-master groups will try to connect to when joining the cluster
+masterService: "aic-elasticsearch-master"
+
+# Roles that will be applied to all nodes
+roles:
+  master: "true"
+  ingest: "true"
+  data: "true"
+  remote_cluster_client: "true"
+  ml: "true"
+
+# Replica count for each component
+replicas: 3
+
+# Minimum number of masters needed to form a quorum
+minimumMasterNodes: 2
+
+# Elasticsearch version
+imageTag: "8.8.1"
+
+# Resource limits and requests
+resources:
+  requests:
+    cpu: "1"
+    memory: "2Gi"
+  limits:
+    cpu: "2"
+    memory: "4Gi"
+
+# JVM heap size
+esJavaOpts: "-Xmx2g -Xms2g"
+
+# Persistence configuration
+persistence:
+  enabled: true
+  labels:
+    enabled: true
+  annotations: {}
+  accessMode: ReadWriteOnce
+  size: 100Gi
+  storageClass: "longhorn"
+
+# Security settings
+protocol: https
+createCert: true
+secret:
+  enabled: true
+  name: "elasticsearch-security-certs"
+
+# Security features
+securityContext:
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Network policies
+networkPolicy:
+  http:
+    enabled: true
+    ingress:
+      - namespaceSelector:
+          matchLabels:
+            name: observability
+      - namespaceSelector:
+          matchLabels:
+            name: api-gateway
+      - namespaceSelector:
+          matchLabels:
+            name: backend-services
+      - namespaceSelector:
+          matchLabels:
+            name: ai-services
+      - namespaceSelector:
+          matchLabels:
+            name: cms
+
+# Anti-affinity for high availability
+antiAffinity: "hard"
+
+# Service configuration
+service:
+  type: ClusterIP
+  nodePort: ""
+  annotations: {}
+  httpPortName: http
+  transportPortName: transport
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+  externalTrafficPolicy: ""
+
+# Ingress configuration
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/strip-path: "false"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  path: /
+  hosts:
+    - elasticsearch.example.com
+  tls:
+    - secretName: elasticsearch-tls
+      hosts:
+        - elasticsearch.example.com
+
+# Prometheus metrics
+prometheus:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      namespace: "observability"
+      labels:
+        release: prometheus
+      interval: 10s
+      scrapeTimeout: 10s
+
+# Lifecycle hooks
+lifecycle:
+  postStart:
+    exec:
+      command:
+        - bash
+        - -c
+        - |
+          #!/bin/bash
+          # Add any post-start initialization here
+
+# Init containers for system settings
+sysctlInitContainer:
+  enabled: true
+
+# Extra init containers
+extraInitContainers: []
+
+# Pod annotations
+podAnnotations:
+  kuma.io/mesh: default
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9114"
+  prometheus.io/path: "/metrics"
+
+# Extra environment variables
+extraEnvs:
+  - name: ELASTIC_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: elasticsearch-credentials
+        key: password
+  - name: ES_JAVA_OPTS
+    value: "-Xmx2g -Xms2g"
+
+# Readiness probe
+readinessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  successThreshold: 3
+  timeoutSeconds: 5
+
+# Health check
+clusterHealthCheckParams: "wait_for_status=yellow&timeout=1s"
+
+# Snapshot repository configuration
+keystore:
+  - secretName: elasticsearch-s3-credentials
+    items:
+      - key: s3.client.default.access_key
+        path: s3.client.default.access_key
+      - key: s3.client.default.secret_key
+        path: s3.client.default.secret_key

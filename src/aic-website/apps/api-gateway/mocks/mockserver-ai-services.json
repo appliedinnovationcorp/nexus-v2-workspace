@@ -1,0 +1,82 @@
+[
+  {
+    "httpRequest": {
+      "path": "/health"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "status": "ok",
+        "timestamp": "${now}",
+        "service": "ai-services"
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/models"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": [
+        {
+          "id": "gpt-4",
+          "name": "GPT-4",
+          "description": "Advanced language model for text generation",
+          "version": "1.0.0",
+          "status": "active"
+        },
+        {
+          "id": "stable-diffusion",
+          "name": "Stable Diffusion",
+          "description": "Image generation model",
+          "version": "2.1.0",
+          "status": "active"
+        }
+      ]
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/models/gpt-4/predict"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "id": "pred-123456",
+        "model": "gpt-4",
+        "result": "This is a sample response from the AI model. The actual response would be based on the input provided.",
+        "timestamp": "${now}"
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/agents/assistant/execute"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "id": "exec-789012",
+        "agent": "assistant",
+        "response": "I'm an AI assistant. How can I help you today?",
+        "timestamp": "${now}"
+      }
+    }
+  }
+]

@@ -1,0 +1,94 @@
+# Policy Validation Template for GitLab CI
+# Include this template in your .gitlab-ci.yml file:
+# include:
+#   - local: /infrastructure/cicd/gitlab-ci/templates/policy-validation.yml
+
+# Validate OPA policies
+validate-opa-policies:
+  stage: validate
+  image: openpolicyagent/opa:latest
+  script:
+    - cd infrastructure/cicd/gitlab-ci/policies/opa
+    - opa check --strict *.rego
+    - opa test *.rego
+  rules:
+    - changes:
+        - infrastructure/cicd/gitlab-ci/policies/opa/**/*
+      when: always
+
+# Validate pipeline against policies
+validate-pipeline-policies:
+  stage: validate
+  image: openpolicyagent/opa:latest
+  script:
+    - cd infrastructure/cicd/gitlab-ci/policies/opa
+    - |
+      # Generate pipeline input from current pipeline
+      cat > pipeline-input.json << EOF
+      {
+        "pipeline": {
+          "id": $CI_PIPELINE_ID,
+          "source_branch": "$CI_COMMIT_BRANCH",
+          "jobs": $(curl --header "PRIVATE-TOKEN: $CI_JOB_TOKEN" "$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines/$CI_PIPELINE_ID/jobs" | jq '[.[] | {name: .name, image: .image, script: .script, tags: .tags}]'),
+          "variables": $(curl --header "PRIVATE-TOKEN: $CI_JOB_TOKEN" "$CI_API_V4_URL/projects/$CI_PROJECT_ID/variables" | jq '[.[] | {key: .key, value: "***", masked: .masked, protected: .protected}]')
+        },
+        "user": {
+          "id": $GITLAB_USER_ID,
+          "username": "$GITLAB_USER_LOGIN",
+          "email": "$GITLAB_USER_EMAIL",
+          "role": "developer"
+        },
+        "job": {
+          "name": "$CI_JOB_NAME",
+          "image": "$CI_JOB_IMAGE",
+          "script": ["$CI_JOB_SCRIPT"],
+          "tags": $(echo $CI_JOB_TAGS | jq -R 'split(" ")')
+        }
+      }
+      EOF
+    - |
+      # Validate pipeline against policies
+      echo "Validating security policies..."
+      opa eval --format pretty --data security.rego --data common.rego --input pipeline-input.json "data.gitlab.security.allow"
+      if [ $? -ne 0 ]; then
+        echo "Security policy violations:"
+        opa eval --format pretty --data security.rego --data common.rego --input pipeline-input.json "data.gitlab.security.violation"
+        exit 1
+      fi
+      
+      echo "Validating compliance policies..."
+      opa eval --format pretty --data compliance.rego --data common.rego --input pipeline-input.json "data.gitlab.compliance.allow"
+      if [ $? -ne 0 ]; then
+        echo "Compliance policy violations:"
+        opa eval --format pretty --data compliance.rego --data common.rego --input pipeline-input.json "data.gitlab.compliance.violation"
+        exit 1
+      fi
+      
+      echo "Validating deployment policies..."
+      opa eval --format pretty --data deployment.rego --data common.rego --input pipeline-input.json "data.gitlab.deployment.allow"
+      if [ $? -ne 0 ]; then
+        echo "Deployment policy violations:"
+        opa eval --format pretty --data deployment.rego --data common.rego --input pipeline-input.json "data.gitlab.deployment.violation"
+        exit 1
+      fi
+      
+      echo "Validating resource policies..."
+      opa eval --format pretty --data resource.rego --data common.rego --input pipeline-input.json "data.gitlab.resource.allow"
+      if [ $? -ne 0 ]; then
+        echo "Resource policy violations:"
+        opa eval --format pretty --data resource.rego --data common.rego --input pipeline-input.json "data.gitlab.resource.violation"
+        exit 1
+      fi
+      
+      echo "Validating access policies..."
+      opa eval --format pretty --data access.rego --data common.rego --input pipeline-input.json "data.gitlab.access.allow"
+      if [ $? -ne 0 ]; then
+        echo "Access policy violations:"
+        opa eval --format pretty --data access.rego --data common.rego --input pipeline-input.json "data.gitlab.access.violation"
+        exit 1
+      fi
+      
+      echo "All policies validated successfully!"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always

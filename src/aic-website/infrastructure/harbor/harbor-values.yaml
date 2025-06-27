@@ -1,0 +1,334 @@
+# Harbor Helm Chart Values for AIC Website
+# This configuration sets up Harbor as a container registry for the GitLab CI pipeline
+
+# Expose Harbor service
+expose:
+  type: ingress
+  tls:
+    enabled: true
+    certSource: secret
+    secret:
+      secretName: harbor-tls-cert
+      notarySecretName: harbor-notary-tls-cert
+  ingress:
+    hosts:
+      core: harbor.aicorp.com
+      notary: notary.aicorp.com
+    controller: default
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+
+# External URL configuration
+externalURL: https://harbor.aicorp.com
+
+# Harbor admin password (will be overridden by secret)
+harborAdminPassword: "Harbor12345"
+
+# Persistence configuration
+persistence:
+  enabled: true
+  resourcePolicy: "keep"
+  persistentVolumeClaim:
+    registry:
+      existingClaim: ""
+      storageClass: "gp3"
+      subPath: ""
+      accessMode: ReadWriteOnce
+      size: 100Gi
+    chartmuseum:
+      existingClaim: ""
+      storageClass: "gp3"
+      subPath: ""
+      accessMode: ReadWriteOnce
+      size: 10Gi
+    jobservice:
+      jobLog:
+        existingClaim: ""
+        storageClass: "gp3"
+        subPath: ""
+        accessMode: ReadWriteOnce
+        size: 5Gi
+    database:
+      existingClaim: ""
+      storageClass: "gp3"
+      subPath: ""
+      accessMode: ReadWriteOnce
+      size: 20Gi
+    redis:
+      existingClaim: ""
+      storageClass: "gp3"
+      subPath: ""
+      accessMode: ReadWriteOnce
+      size: 5Gi
+    trivy:
+      existingClaim: ""
+      storageClass: "gp3"
+      subPath: ""
+      accessMode: ReadWriteOnce
+      size: 10Gi
+
+# Image pull policy
+imagePullPolicy: IfNotPresent
+
+# Log level
+logLevel: info
+
+# Harbor core configuration
+core:
+  replicas: 2
+  revisionHistoryLimit: 10
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 10
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  serviceAnnotations: {}
+
+# Job service configuration
+jobservice:
+  replicas: 2
+  revisionHistoryLimit: 10
+  maxJobWorkers: 10
+  jobLoggers:
+    - stdout
+  loggerSweeperDuration: 300
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+# Registry configuration
+registry:
+  replicas: 2
+  revisionHistoryLimit: 10
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  serviceAnnotations: {}
+  middleware:
+    enabled: false
+    type: cloudFront
+    cloudFront:
+      baseurl: https://d1234567890.cloudfront.net
+      keypairid: KEYPAIRID
+      duration: 3000s
+      ipfilteredby: aws
+      privateKeySecret: "my-secret"
+
+# ChartMuseum configuration
+chartmuseum:
+  enabled: true
+  replicas: 1
+  revisionHistoryLimit: 10
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+
+# Trivy scanner configuration
+trivy:
+  enabled: true
+  replicas: 1
+  debugMode: false
+  vulnType: "os,library"
+  severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+  ignoreUnfixed: false
+  insecure: false
+  gitHubToken: ""
+  skipUpdate: false
+  offlineScan: false
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Notary configuration
+notary:
+  enabled: true
+  server:
+    replicas: 1
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 100m
+      limits:
+        memory: 256Mi
+        cpu: 200m
+  signer:
+    replicas: 1
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 100m
+      limits:
+        memory: 256Mi
+        cpu: 200m
+
+# Database configuration (PostgreSQL)
+database:
+  type: internal
+  internal:
+    image:
+      repository: goharbor/harbor-db
+      tag: v2.9.0
+    password: "changeit"
+    shmSizeLimit: 512Mi
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+  external:
+    host: "192.168.0.1"
+    port: "5432"
+    username: "user"
+    password: "password"
+    coreDatabase: "registry"
+    notaryServerDatabase: "notary_server"
+    notarySignerDatabase: "notary_signer"
+    sslmode: "disable"
+  maxIdleConns: 100
+  maxOpenConns: 900
+  podAnnotations: {}
+
+# Redis configuration
+redis:
+  type: internal
+  internal:
+    image:
+      repository: goharbor/redis-photon
+      tag: v2.9.0
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+  external:
+    addr: "192.168.0.2:6379"
+    sentinelMasterSet: ""
+    coreDatabaseIndex: "0"
+    jobserviceDatabaseIndex: "1"
+    registryDatabaseIndex: "2"
+    chartmuseumDatabaseIndex: "3"
+    trivyAdapterIndex: "5"
+    password: ""
+  podAnnotations: {}
+
+# Portal configuration
+portal:
+  replicas: 2
+  revisionHistoryLimit: 10
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  serviceAnnotations: {}
+
+# Metrics configuration
+metrics:
+  enabled: true
+  core:
+    path: /metrics
+    port: 8001
+  registry:
+    path: /metrics
+    port: 8001
+  jobservice:
+    path: /metrics
+    port: 8001
+  exporter:
+    path: /metrics
+    port: 8001
+  serviceMonitor:
+    enabled: true
+    additionalLabels: {}
+    interval: ""
+    metricRelabelings: []
+    relabelings: []
+
+# Network policies
+networkPolicy:
+  enabled: false
+  ingress:
+    ipBlock:
+      cidr: 0.0.0.0/0
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10000
+  fsGroup: 10000
+
+# Container security context
+containerSecurityContext:
+  privileged: false
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 10000
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+
+# Service account
+serviceAccount:
+  create: true
+  automount: true
+
+# RBAC
+rbac:
+  create: true
+
+# Cache configuration
+cache:
+  enabled: false
+  expireHours: 24

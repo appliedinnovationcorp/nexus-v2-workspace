@@ -1,0 +1,144 @@
+jenkins:
+  systemMessage: "Jenkins for AIC Website - Production Deployments"
+  numExecutors: 0
+  mode: EXCLUSIVE
+  scmCheckoutRetryCount: 3
+  labelString: "master"
+  
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "${ADMIN_PASSWORD}"
+        - id: "gitlab-webhook"
+          password: "${GITLAB_WEBHOOK_PASSWORD}"
+  
+  authorizationStrategy:
+    roleBased:
+      roles:
+        global:
+          - name: "admin"
+            description: "Jenkins administrators"
+            permissions:
+              - "Overall/Administer"
+            assignments:
+              - "admin"
+          - name: "deployer"
+            description: "Deployment users"
+            permissions:
+              - "Overall/Read"
+              - "Job/Build"
+              - "Job/Read"
+              - "Job/Workspace"
+              - "Job/Cancel"
+            assignments:
+              - "gitlab-webhook"
+  
+  clouds:
+    - kubernetes:
+        name: "kubernetes"
+        serverUrl: "https://kubernetes.default.svc.cluster.local"
+        skipTlsVerify: false
+        namespace: "jenkins"
+        jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
+        jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
+        containerCapStr: "10"
+        maxRequestsPerHostStr: "32"
+        retentionTimeout: 5
+        connectTimeout: 10
+        readTimeout: 20
+        templates:
+          - name: "jenkins-agent"
+            namespace: "jenkins"
+            label: "jenkins-agent"
+            nodeUsageMode: EXCLUSIVE
+            containers:
+              - name: "jnlp"
+                image: "jenkins/inbound-agent:4.11.2-4-alpine"
+                alwaysPullImage: true
+                workingDir: "/home/jenkins/agent"
+                ttyEnabled: true
+                resourceRequestCpu: "500m"
+                resourceRequestMemory: "512Mi"
+                resourceLimitCpu: "1000m"
+                resourceLimitMemory: "1Gi"
+            idleMinutes: 1
+            activeDeadlineSeconds: 120
+            slaveConnectTimeout: 100
+            serviceAccount: "jenkins"
+  
+  globalNodeProperties:
+    - envVars:
+        env:
+          - key: "ENVIRONMENT"
+            value: "production"
+          - key: "REGISTRY"
+            value: "registry.gitlab.example.com"
+  
+  crumbIssuer:
+    standard:
+      excludeClientIPFromCrumb: false
+
+security:
+  queueItemAuthenticator:
+    authenticators:
+      - global:
+          strategy: triggeringUsersAuthorizationStrategy
+
+unclassified:
+  location:
+    url: "https://jenkins.example.com/"
+    adminAddress: "admin@example.com"
+  
+  gitLabServers:
+    servers:
+      - name: "GitLab"
+        serverUrl: "https://gitlab.example.com"
+        credentialsId: "gitlab-api-token"
+        manageWebHooks: true
+        secretToken: "${GITLAB_WEBHOOK_SECRET}"
+  
+  slackNotifier:
+    teamDomain: "example"
+    tokenCredentialId: "slack-token"
+    room: "#deployments"
+  
+  globalLibraries:
+    libraries:
+      - name: "deployment-library"
+        defaultVersion: "main"
+        retriever:
+          modernSCM:
+            scm:
+              git:
+                remote: "git@gitlab.example.com:aic-website/jenkins-libraries.git"
+                credentialsId: "jenkins-ssh-key"
+
+jobs:
+  - file: /var/jenkins_home/jobs/aic-website-production-deploy.groovy
+  - file: /var/jenkins_home/jobs/aic-website-rollback.groovy
+  - file: /var/jenkins_home/jobs/aic-website-database-migration.groovy
+  - file: /var/jenkins_home/jobs/aic-website-smoke-test.groovy
+
+tool:
+  git:
+    installations:
+      - name: "Default"
+        home: "git"
+  
+  maven:
+    installations:
+      - name: "Maven 3"
+        home: "/usr/share/maven"
+  
+  nodejs:
+    installations:
+      - name: "NodeJS 18"
+        home: "/usr/local/bin/node"
+        properties:
+          - installSource:
+              installers:
+                - nodeJSInstaller:
+                    id: "18.16.0"
+                    npmPackages: "yarn@1.22.19"

@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: production-config
+  namespace: backend-services
+data:
+  # Production-specific overrides
+  debug-enabled: "false"
+  log-level: "warn"
+  enable-monitoring: "true"
+  enable-alerting: "true"
+  
+  # Production security settings
+  security-config.json: |
+    {
+      "encryption": {
+        "enabled": true,
+        "algorithm": "AES-256-GCM"
+      },
+      "audit": {
+        "enabled": true,
+        "logLevel": "info"
+      },
+      "rateLimit": {
+        "strict": true,
+        "burst": false
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: production-config
+  namespace: ai-services
+data:
+  # AI services production overrides
+  cost-tracking: "true"
+  budget-alerts: "true"
+  performance-monitoring: "true"
+  security-scanning: "true"

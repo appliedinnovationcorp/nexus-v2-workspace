@@ -1,0 +1,199 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: staging-config
+  namespace: backend-services
+  labels:
+    app: aic-website
+    environment: staging
+    part-of: aic-website
+data:
+  environment: "staging"
+  log-level: "info"
+  debug-mode: "false"
+  
+  database-config.json: |
+    {
+      "postgresql": {
+        "host": "aic-website-db-staging.default.svc.cluster.local",
+        "port": 5432,
+        "database": "aic_staging",
+        "ssl": true,
+        "poolSize": 10,
+        "connectionTimeout": 10000,
+        "idleTimeout": 60000,
+        "logQueries": false
+      },
+      "redis": {
+        "host": "aic-website-redis-staging.default.svc.cluster.local",
+        "port": 6379,
+        "database": 1,
+        "keyPrefix": "aic:staging:",
+        "ttl": 600,
+        "maxRetries": 5,
+        "cluster": false
+      },
+      "mongodb": {
+        "host": "aic-website-mongo-staging.default.svc.cluster.local",
+        "port": 27017,
+        "database": "aic_staging",
+        "authSource": "admin",
+        "ssl": true,
+        "poolSize": 10
+      }
+    }
+  
+  api-config.json: |
+    {
+      "rateLimit": {
+        "enabled": true,
+        "windowMs": 900000,
+        "max": 200,
+        "skipSuccessfulRequests": false
+      },
+      "cors": {
+        "allowedOrigins": [
+          "https://staging.aicorp.com",
+          "https://smb-staging.aicorp.com",
+          "https://enterprise-staging.aicorp.com"
+        ],
+        "credentials": true,
+        "maxAge": 3600
+      },
+      "security": {
+        "helmet": {
+          "contentSecurityPolicy": true,
+          "crossOriginEmbedderPolicy": true,
+          "hsts": {
+            "maxAge": 31536000,
+            "includeSubDomains": true
+          }
+        },
+        "jwt": {
+          "expiresIn": "8h",
+          "refreshExpiresIn": "3d"
+        }
+      },
+      "cache": {
+        "enabled": true,
+        "ttl": 300,
+        "checkPeriod": 60
+      }
+    }
+  
+  monitoring-config.json: |
+    {
+      "metrics": {
+        "enabled": true,
+        "interval": 30,
+        "detailed": true
+      },
+      "tracing": {
+        "enabled": true,
+        "sampleRate": 0.5,
+        "jaegerEndpoint": "http://jaeger-collector:14268/api/traces"
+      },
+      "logging": {
+        "level": "info",
+        "structured": true,
+        "includeRequestId": true,
+        "excludeHealthChecks": true
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: staging-config
+  namespace: ai-services
+  labels:
+    app: ai-services
+    environment: staging
+    part-of: aic-website
+data:
+  environment: "staging"
+  log-level: "info"
+  
+  ai-staging-config.json: |
+    {
+      "providers": {
+        "openai": {
+          "enabled": true,
+          "rateLimit": true,
+          "costTracking": true,
+          "models": {
+            "chat": "gpt-3.5-turbo",
+            "embedding": "text-embedding-3-small"
+          }
+        },
+        "ollama": {
+          "enabled": true,
+          "host": "http://ollama-staging:11434",
+          "timeout": 60000
+        }
+      },
+      "caching": {
+        "enabled": true,
+        "ttl": 3600,
+        "redis": {
+          "keyPrefix": "ai:staging:"
+        }
+      },
+      "monitoring": {
+        "enabled": true,
+        "trackCosts": true,
+        "trackLatency": true,
+        "alertThresholds": {
+          "costPerHour": 10,
+          "latencyP95": 5000
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: staging-config
+  namespace: cms
+  labels:
+    app: ghost-cms
+    environment: staging
+    part-of: aic-website
+data:
+  environment: "staging"
+  
+  ghost-staging-config.json: |
+    {
+      "url": "https://cms-staging.aicorp.com",
+      "database": {
+        "client": "mysql",
+        "connection": {
+          "host": "ghost-mysql-staging.cms.svc.cluster.local",
+          "port": 3306,
+          "database": "ghost_staging",
+          "ssl": true
+        },
+        "pool": {
+          "min": 2,
+          "max": 10
+        }
+      },
+      "mail": {
+        "transport": "SMTP",
+        "options": {
+          "service": "Mailgun",
+          "host": "smtp.mailgun.org",
+          "port": 587,
+          "secure": false
+        }
+      },
+      "logging": {
+        "level": "info",
+        "transports": ["file", "stdout"]
+      },
+      "imageOptimization": {
+        "resize": true,
+        "quality": 80,
+        "formats": ["webp", "jpg"]
+      }
+    }

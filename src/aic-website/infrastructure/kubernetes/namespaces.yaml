@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: api-gateway
+  labels:
+    name: api-gateway
+    part-of: aic-website
+    tier: frontend
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backend-services
+  labels:
+    name: backend-services
+    part-of: aic-website
+    tier: backend
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-services
+  labels:
+    name: ai-services
+    part-of: aic-website
+    tier: backend
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cms
+  labels:
+    name: cms
+    part-of: aic-website
+    tier: backend
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    name: observability
+    part-of: aic-website
+    tier: infrastructure
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security
+  labels:
+    name: security
+    part-of: aic-website
+    tier: infrastructure
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storage
+  labels:
+    name: storage
+    part-of: aic-website
+    tier: infrastructure
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: messaging
+  labels:
+    name: messaging
+    part-of: aic-website
+    tier: infrastructure

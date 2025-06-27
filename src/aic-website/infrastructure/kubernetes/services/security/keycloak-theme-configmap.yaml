@@ -1,0 +1,225 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-aic-theme
+  namespace: security
+  labels:
+    app: keycloak
+    part-of: aic-website
+data:
+  # Login theme resources
+  "login/theme.properties": |
+    parent=keycloak
+    import=common/keycloak
+    styles=css/login.css
+    stylesCommon=web_modules/@patternfly/react-core/dist/styles/base.css web_modules/@patternfly/react-core/dist/styles/app.css node_modules/patternfly/dist/css/patternfly.min.css node_modules/patternfly/dist/css/patternfly-additions.min.css lib/pficon/pficon.css
+    
+    kcLogoLink=https://www.example.com
+    kcLogoClass=login-pf-brand
+    
+    kcFormGroupClass=form-group
+    kcFormGroupErrorClass=has-error
+    kcLabelClass=control-label
+    kcLabelWrapperClass=col-xs-12 col-sm-12 col-md-12 col-lg-12
+    kcInputClass=form-control
+    kcInputWrapperClass=col-xs-12 col-sm-12 col-md-12 col-lg-12
+    kcFormOptionsClass=col-xs-12 col-sm-12 col-md-12 col-lg-12
+    kcFormButtonsClass=col-xs-12 col-sm-12 col-md-12 col-lg-12
+    kcFormSettingClass=login-pf-settings
+    kcTextareaClass=form-control
+    kcSignUpClass=login-pf-signup
+    
+    kcInfoAreaClass=col-xs-12 col-sm-4 col-md-4 col-lg-5 details
+    
+    kcFeedbackErrorIcon=pficon pficon-error-circle-o
+    kcFeedbackWarningIcon=pficon pficon-warning-triangle-o
+    kcFeedbackSuccessIcon=pficon pficon-ok
+    kcFeedbackInfoIcon=pficon pficon-info
+  
+  "login/resources/css/login.css": |
+    .login-pf body {
+      background: url("../img/background.jpg") no-repeat center center fixed;
+      background-size: cover;
+      height: 100%;
+    }
+    
+    .login-pf-page .card-pf {
+      padding-bottom: 10px;
+      background-color: rgba(255, 255, 255, 0.9);
+      margin-left: auto;
+      margin-right: auto;
+      margin-top: 0;
+      max-width: 500px;
+      border-top: 0;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+    }
+    
+    .login-pf-page .login-pf-header {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    
+    .login-pf-page .login-pf-header h1 {
+      font-size: 24px;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      color: #333;
+    }
+    
+    .login-pf-page .login-pf-header .login-pf-brand {
+      margin-top: 20px;
+      margin-bottom: 15px;
+    }
+    
+    .login-pf-page .login-pf-header .login-pf-brand img {
+      max-height: 100px;
+    }
+    
+    #kc-locale ul {
+      background-color: rgba(255, 255, 255, 0.9);
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+    
+    a.kc-forgot-password {
+      font-weight: normal;
+    }
+    
+    .login-pf-settings {
+      text-align: right;
+    }
+    
+    .login-pf-signup {
+      margin-top: 20px;
+      font-size: 14px;
+    }
+    
+    .btn-primary {
+      background-color: #0066cc;
+      background-image: linear-gradient(to bottom, #0066cc 0%, #004080 100%);
+      border-color: #004080;
+    }
+    
+    .btn-primary:hover {
+      background-color: #004080;
+      background-image: none;
+      border-color: #002b57;
+    }
+    
+    .form-control:focus {
+      border-color: #0066cc;
+      box-shadow: 0 0 8px rgba(0, 102, 204, 0.6);
+    }
+    
+    @media (max-width: 767px) {
+      .login-pf-page .card-pf {
+        max-width: none;
+        margin-left: 0;
+        margin-right: 0;
+        padding-top: 0;
+        border-top: 0;
+        box-shadow: 0 0;
+      }
+      
+      .login-pf-page .card-pf {
+        background-color: rgba(255, 255, 255, 0.8);
+      }
+    }
+  
+  # Account theme resources
+  "account/theme.properties": |
+    parent=keycloak
+    import=common/keycloak
+    styles=css/account.css
+    stylesCommon=web_modules/@patternfly/react-core/dist/styles/base.css web_modules/@patternfly/react-core/dist/styles/app.css node_modules/patternfly/dist/css/patternfly.min.css node_modules/patternfly/dist/css/patternfly-additions.min.css
+    
+    kcLogoLink=https://www.example.com
+  
+  "account/resources/css/account.css": |
+    .navbar-title {
+      background-image: url(../img/logo.png);
+      background-repeat: no-repeat;
+      background-size: contain;
+      width: 200px;
+      height: 40px;
+      margin: 5px 10px 5px 0;
+    }
+    
+    .navbar-pf {
+      background-color: #0066cc;
+      border-color: #004080;
+    }
+    
+    .navbar-pf .navbar-utility > li > a {
+      color: #fff;
+    }
+    
+    .navbar-pf .navbar-utility > .open > a,
+    .navbar-pf .navbar-utility > .open > a:hover,
+    .navbar-pf .navbar-utility > .open > a:focus,
+    .navbar-pf .navbar-utility > li > a:hover,
+    .navbar-pf .navbar-utility > li > a:focus {
+      background-color: #004080;
+    }
+    
+    .btn-primary {
+      background-color: #0066cc;
+      background-image: linear-gradient(to bottom, #0066cc 0%, #004080 100%);
+      border-color: #004080;
+    }
+    
+    .btn-primary:hover {
+      background-color: #004080;
+      background-image: none;
+      border-color: #002b57;
+    }
+  
+  # Email theme resources
+  "email/theme.properties": |
+    parent=keycloak
+    import=common/keycloak
+    
+    emailHeader=<html><body><div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px;"><div style="text-align: center; margin-bottom: 20px;"><img src="https://www.example.com/logo.png" alt="AIC Website" style="max-width: 200px;"></div>
+    emailFooter=<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666;">© 2023 AIC Website. All rights reserved.</div></div></body></html>
+  
+  # Admin theme resources
+  "admin/theme.properties": |
+    parent=keycloak
+    import=common/keycloak
+    styles=css/admin.css
+    
+    masterRealmName=AIC Website
+    
+  "admin/resources/css/admin.css": |
+    .navbar-pf {
+      background-color: #0066cc;
+      border-color: #004080;
+    }
+    
+    .navbar-pf .navbar-header {
+      border-bottom-color: #004080;
+    }
+    
+    .navbar-pf .navbar-utility > li > a {
+      color: #fff;
+    }
+    
+    .navbar-pf .navbar-utility > .open > a,
+    .navbar-pf .navbar-utility > .open > a:hover,
+    .navbar-pf .navbar-utility > .open > a:focus,
+    .navbar-pf .navbar-utility > li > a:hover,
+    .navbar-pf .navbar-utility > li > a:focus {
+      background-color: #004080;
+    }
+    
+    .btn-primary {
+      background-color: #0066cc;
+      background-image: linear-gradient(to bottom, #0066cc 0%, #004080 100%);
+      border-color: #004080;
+    }
+    
+    .btn-primary:hover {
+      background-color: #004080;
+      background-image: none;
+      border-color: #002b57;
+    }

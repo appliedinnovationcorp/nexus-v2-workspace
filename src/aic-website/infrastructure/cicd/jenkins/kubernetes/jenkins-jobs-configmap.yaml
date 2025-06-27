@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-jobs
+  namespace: jenkins
+data:
+  aic-website-production-deploy.groovy: |
+    // This is a placeholder - the actual job configuration is loaded from the filesystem
+    // See /infrastructure/cicd/jenkins/jobs/aic-website-production-deploy.groovy
+  
+  aic-website-rollback.groovy: |
+    // This is a placeholder - the actual job configuration is loaded from the filesystem
+    // See /infrastructure/cicd/jenkins/jobs/aic-website-rollback.groovy
+  
+  aic-website-database-migration.groovy: |
+    // This is a placeholder - the actual job configuration is loaded from the filesystem
+    // See /infrastructure/cicd/jenkins/jobs/aic-website-database-migration.groovy
+  
+  aic-website-smoke-test.groovy: |
+    // This is a placeholder - the actual job configuration is loaded from the filesystem
+    // See /infrastructure/cicd/jenkins/jobs/aic-website-smoke-test.groovy

@@ -1,0 +1,180 @@
+prometheus:
+  enabled: true
+  
+  prometheusSpec:
+    replicas: 2
+    
+    retention: 15d
+    
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+    
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    
+    serviceMonitorSelector:
+      matchLabels:
+        release: prometheus
+    
+    additionalScrapeConfigs:
+      - job_name: 'kong'
+        scrape_interval: 15s
+        kubernetes_sd_configs:
+          - role: service
+            namespaces:
+              names:
+                - api-gateway
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: kong-kong-admin
+            action: keep
+      
+      - job_name: 'kuma-dataplanes'
+        scrape_interval: 15s
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - api-gateway
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_kuma_io_dataplane]
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+            replacement: /metrics/$1
+
+alertmanager:
+  enabled: true
+  
+  alertmanagerSpec:
+    replicas: 2
+    
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 200m
+        memory: 512Mi
+    
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    
+    alertmanagerConfiguration:
+      name: alertmanager-config
+      
+  config:
+    global:
+      resolve_timeout: 5m
+    
+    route:
+      group_by: ['alertname', 'job']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'slack'
+      routes:
+        - match:
+            severity: critical
+          receiver: 'pagerduty'
+    
+    receivers:
+      - name: 'slack'
+        slack_configs:
+          - api_url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
+            channel: '#alerts'
+            send_resolved: true
+      
+      - name: 'pagerduty'
+        pagerduty_configs:
+          - service_key: '<pagerduty-service-key>'
+            send_resolved: true
+
+grafana:
+  enabled: true
+  
+  replicas: 2
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
+  
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 10Gi
+  
+  adminPassword: "admin-password-change-me"
+  
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'default'
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+  
+  dashboards:
+    default:
+      kong-dashboard:
+        gnetId: 7424
+        revision: 6
+        datasource: Prometheus
+      
+      kuma-dashboard:
+        gnetId: 13637
+        revision: 1
+        datasource: Prometheus
+      
+      kubernetes-cluster:
+        gnetId: 6417
+        revision: 1
+        datasource: Prometheus
+  
+  additionalDataSources:
+    - name: Elasticsearch
+      type: elasticsearch
+      access: proxy
+      url: http://elasticsearch-master.observability:9200
+      jsonData:
+        timeField: "@timestamp"
+        esVersion: 7.10.0
+    
+    - name: Jaeger
+      type: jaeger
+      access: proxy
+      url: http://jaeger-query.observability:16686
+      
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL

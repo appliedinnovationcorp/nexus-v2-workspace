@@ -1,0 +1,32 @@
+/* Component-specific styles */
+
+/* Header styles */
+.header-gradient-cta {
+  background-image: linear-gradient(96.69deg, #6714cc 4.32%, #2673fb 92.12%);
+}
+
+/* Navigation styles */
+.nav-dropdown {
+  @apply absolute top-full left-0 mt-0 bg-background border rounded-md shadow-lg z-50;
+}
+
+.nav-dropdown-item {
+  @apply block px-4 py-2 text-sm hover:bg-accent transition-colors;
+}
+
+/* Megamenu styles */
+.megamenu {
+  @apply absolute top-full left-0 mt-0 bg-background border rounded-md shadow-lg z-50;
+}
+
+.megamenu-category {
+  @apply space-y-3;
+}
+
+.megamenu-category-title {
+  @apply font-semibold text-foreground border-b border-border pb-2;
+}
+
+.megamenu-item {
+  @apply block text-sm text-foreground/70 hover:text-foreground hover:bg-accent/50 px-2 py-1 rounded transition-colors;
+}

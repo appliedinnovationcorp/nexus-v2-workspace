@@ -1,0 +1,165 @@
+version: '3.8'
+
+networks:
+  aic-network:
+    name: aic-network
+
+services:
+  # Kong API Gateway
+  kong-database:
+    image: postgres:13
+    container_name: kong-database
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_DB: kong
+      POSTGRES_PASSWORD: kong
+    volumes:
+      - kong_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "kong"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aic-network
+
+  kong-migration:
+    image: kong:3.4
+    container_name: kong-migration
+    depends_on:
+      - kong-database
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+    command: kong migrations bootstrap
+    networks:
+      - aic-network
+
+  kong:
+    image: kong:3.4
+    container_name: kong
+    depends_on:
+      - kong-database
+      - kong-migration
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_ADMIN_GUI_URL: http://localhost:8002
+      KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yaml
+    ports:
+      - "8000:8000" # Proxy
+      - "8443:8443" # Proxy SSL
+      - "8001:8001" # Admin API
+      - "8444:8444" # Admin API SSL
+      - "8002:8002" # Admin GUI
+      - "8445:8445" # Admin GUI SSL
+    volumes:
+      - ./kong:/usr/local/kong/declarative
+    networks:
+      - aic-network
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # Kuma Service Mesh
+  kuma-control-plane:
+    image: kumahq/kuma-cp:2.4.2
+    container_name: kuma-control-plane
+    environment:
+      KUMA_MODE: standalone
+      KUMA_ENVIRONMENT: universal
+      KUMA_GENERAL_ADVERTISED_HOSTNAME: kuma-control-plane
+      KUMA_API_SERVER_HTTP_PORT: 5681
+      KUMA_MONITORING_ASSIGNMENT_SERVER_GRPC_PORT: 5676
+    ports:
+      - "5681:5681" # Kuma API
+      - "5676:5676" # Monitoring assignment server
+    volumes:
+      - ./kuma:/etc/kuma
+      - kuma_data:/var/lib/kuma
+    networks:
+      - aic-network
+
+  # Observability Stack
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    networks:
+      - aic-network
+
+  grafana:
+    image: grafana/grafana:10.0.3
+    container_name: grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+    ports:
+      - "3000:3000"
+    networks:
+      - aic-network
+
+  zipkin:
+    image: openzipkin/zipkin:2.24
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - aic-network
+
+  # Mock Services for Development
+  mock-backend:
+    image: mockserver/mockserver:5.15.0
+    container_name: mock-backend
+    environment:
+      MOCKSERVER_SERVER_PORT: 4001
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/mockserver-backend.json
+    volumes:
+      - ./mocks:/config
+    ports:
+      - "4001:4001"
+    networks:
+      - aic-network
+
+  mock-ai-services:
+    image: mockserver/mockserver:5.15.0
+    container_name: mock-ai-services
+    environment:
+      MOCKSERVER_SERVER_PORT: 4002
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/mockserver-ai-services.json
+    volumes:
+      - ./mocks:/config
+    ports:
+      - "4002:4002"
+    networks:
+      - aic-network
+
+volumes:
+  kong_data:
+  kuma_data:
+  prometheus_data:
+  grafana_data:

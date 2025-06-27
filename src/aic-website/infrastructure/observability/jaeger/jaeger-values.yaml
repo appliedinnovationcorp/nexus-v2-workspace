@@ -1,0 +1,922 @@
+# Jaeger Distributed Tracing Configuration for AIC Website
+# This configuration provides comprehensive distributed tracing with service mesh integration
+
+# Global configuration
+global:
+  # Image registry settings
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: "gp3"
+
+# Jaeger deployment strategy
+# Options: allInOne, production
+strategy: production
+
+# All-in-one deployment (for development/testing)
+allInOne:
+  enabled: false
+  image:
+    repository: jaegertracing/all-in-one
+    tag: "1.51.0"
+    pullPolicy: IfNotPresent
+  
+  # Resource allocation
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+  
+  # Storage configuration for all-in-one
+  storage:
+    type: memory
+    memory:
+      maxTraces: 50000
+    badger:
+      ephemeral: false
+      directory: /badger/data
+      spanStoreTTL: 72h0m0s
+      keyStoreTTL: 72h0m0s
+  
+  # Sampling configuration
+  sampling:
+    strategies: |
+      {
+        "default_strategy": {
+          "type": "probabilistic",
+          "param": 0.1
+        },
+        "per_service_strategies": [
+          {
+            "service": "aic-website-frontend",
+            "type": "probabilistic",
+            "param": 0.5
+          },
+          {
+            "service": "aic-website-api",
+            "type": "probabilistic",
+            "param": 0.8
+          },
+          {
+            "service": "aic-website-auth",
+            "type": "probabilistic",
+            "param": 1.0
+          }
+        ]
+      }
+
+# Production deployment configuration
+agent:
+  enabled: true
+  image:
+    repository: jaegertracing/jaeger-agent
+    tag: "1.51.0"
+    pullPolicy: IfNotPresent
+  
+  # Deployment strategy
+  strategy: DaemonSet
+  
+  # Resource allocation
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+  
+  # Agent configuration
+  cmdlineParams:
+    reporter.grpc.host-port: "jaeger-collector.observability.svc.cluster.local:14250"
+    reporter.grpc.tls.enabled: true
+    reporter.grpc.tls.ca: /etc/ssl/certs/ca-certificates.crt
+    processor.jaeger-compact.server-max-packet-size: 65000
+    processor.jaeger-binary.server-max-packet-size: 65000
+    processor.zipkin-compact.server-max-packet-size: 65000
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    zipkinThriftPort: 5775
+    compactPort: 6831
+    binaryPort: 6832
+    samplingPort: 5778
+    
+  # Annotations for service mesh integration
+  annotations:
+    sidecar.istio.io/inject: "false"
+    linkerd.io/inject: disabled
+  
+  # Node selector and tolerations
+  nodeSelector: {}
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+  
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# Collector configuration
+collector:
+  enabled: true
+  image:
+    repository: jaegertracing/jaeger-collector
+    tag: "1.51.0"
+    pullPolicy: IfNotPresent
+  
+  # Replica configuration
+  replicaCount: 3
+  
+  # Resource allocation
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 2Gi
+      cpu: 1000m
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    grpc:
+      port: 14250
+    http:
+      port: 14268
+    zipkin:
+      port: 9411
+    otlp:
+      grpc:
+        port: 4317
+      http:
+        port: 4318
+  
+  # Collector configuration
+  cmdlineParams:
+    # Span storage
+    span-storage.type: elasticsearch
+    
+    # Elasticsearch configuration
+    es.server-urls: "https://elasticsearch.observability.svc.cluster.local:9200"
+    es.username: "jaeger"
+    es.password: "jaeger-password"
+    es.tls.enabled: true
+    es.tls.ca: /etc/ssl/certs/ca-certificates.crt
+    es.tls.skip-host-verify: false
+    es.num-shards: 3
+    es.num-replicas: 1
+    es.index-prefix: "jaeger"
+    es.create-index-templates: true
+    es.version: 8
+    
+    # Sampling configuration
+    sampling.strategies-file: /etc/jaeger/sampling/strategies.json
+    
+    # Collector tuning
+    collector.num-workers: 50
+    collector.queue-size: 2000
+    collector.grpc-server.max-message-size: 4194304
+    collector.http-server.host-port: ":14268"
+    
+    # Log configuration
+    log-level: info
+    
+    # Metrics configuration
+    metrics-backend: prometheus
+    metrics-http-route: /metrics
+  
+  # Sampling strategies configuration
+  samplingConfig: |
+    {
+      "service_strategies": [
+        {
+          "service": "aic-website-frontend",
+          "type": "probabilistic",
+          "param": 0.5,
+          "max_traces_per_second": 100,
+          "operation_strategies": [
+            {
+              "operation": "GET /health",
+              "type": "probabilistic",
+              "param": 0.1
+            },
+            {
+              "operation": "POST /api/auth/login",
+              "type": "probabilistic",
+              "param": 1.0
+            }
+          ]
+        },
+        {
+          "service": "aic-website-api",
+          "type": "probabilistic",
+          "param": 0.8,
+          "max_traces_per_second": 200,
+          "operation_strategies": [
+            {
+              "operation": "GET /api/health",
+              "type": "probabilistic",
+              "param": 0.1
+            },
+            {
+              "operation": "POST /api/users",
+              "type": "probabilistic",
+              "param": 1.0
+            },
+            {
+              "operation": "GET /api/users/*",
+              "type": "probabilistic",
+              "param": 0.5
+            }
+          ]
+        },
+        {
+          "service": "aic-website-auth",
+          "type": "probabilistic",
+          "param": 1.0,
+          "max_traces_per_second": 50
+        },
+        {
+          "service": "aic-website-cms",
+          "type": "probabilistic",
+          "param": 0.3,
+          "max_traces_per_second": 30
+        },
+        {
+          "service": "postgres",
+          "type": "probabilistic",
+          "param": 0.2,
+          "max_traces_per_second": 20
+        },
+        {
+          "service": "redis",
+          "type": "probabilistic",
+          "param": 0.1,
+          "max_traces_per_second": 10
+        }
+      ],
+      "default_strategy": {
+        "type": "probabilistic",
+        "param": 0.1,
+        "max_traces_per_second": 50
+      },
+      "per_operation_strategies": [
+        {
+          "service": "*",
+          "operation": "GET /health",
+          "type": "probabilistic",
+          "param": 0.01
+        },
+        {
+          "service": "*",
+          "operation": "GET /metrics",
+          "type": "probabilistic",
+          "param": 0.01
+        },
+        {
+          "service": "*",
+          "operation": "GET /ready",
+          "type": "probabilistic",
+          "param": 0.01
+        }
+      ]
+    }
+  
+  # Ingress configuration
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    hosts:
+      - host: jaeger-collector.aicorp.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: jaeger-collector-tls
+        hosts:
+          - jaeger-collector.aicorp.com
+  
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+  
+  # Affinity and anti-affinity
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - jaeger
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                    - collector
+            topologyKey: kubernetes.io/hostname
+
+# Query service configuration
+query:
+  enabled: true
+  image:
+    repository: jaegertracing/jaeger-query
+    tag: "1.51.0"
+    pullPolicy: IfNotPresent
+  
+  # Replica configuration
+  replicaCount: 2
+  
+  # Resource allocation
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 16686
+    grpc:
+      port: 16685
+  
+  # Query configuration
+  cmdlineParams:
+    # Span storage
+    span-storage.type: elasticsearch
+    
+    # Elasticsearch configuration
+    es.server-urls: "https://elasticsearch.observability.svc.cluster.local:9200"
+    es.username: "jaeger"
+    es.password: "jaeger-password"
+    es.tls.enabled: true
+    es.tls.ca: /etc/ssl/certs/ca-certificates.crt
+    es.tls.skip-host-verify: false
+    es.index-prefix: "jaeger"
+    es.max-span-age: 72h0m0s
+    
+    # Query tuning
+    query.max-clock-skew-adjustment: 0s
+    query.bearer-token-propagation: true
+    query.additional-headers: "Access-Control-Allow-Origin: *"
+    
+    # UI configuration
+    query.ui-config: /etc/jaeger/ui/ui-config.json
+    
+    # Log configuration
+    log-level: info
+    
+    # Metrics configuration
+    metrics-backend: prometheus
+    metrics-http-route: /metrics
+  
+  # UI configuration
+  uiConfig: |
+    {
+      "monitor": {
+        "menuEnabled": true
+      },
+      "dependencies": {
+        "menuEnabled": true
+      },
+      "archiveEnabled": true,
+      "tracking": {
+        "gaID": "",
+        "trackErrors": true
+      },
+      "menu": [
+        {
+          "label": "AIC Website Docs",
+          "url": "https://docs.aicorp.com",
+          "newWindow": true
+        },
+        {
+          "label": "Grafana",
+          "url": "https://grafana.aicorp.com",
+          "newWindow": true
+        },
+        {
+          "label": "Prometheus",
+          "url": "https://prometheus.aicorp.com",
+          "newWindow": true
+        }
+      ],
+      "search": {
+        "maxLookback": {
+          "label": "2 days",
+          "value": "2d"
+        }
+      },
+      "criticalPathEnabled": true,
+      "deepDependencies": {
+        "menuEnabled": true
+      }
+    }
+  
+  # Ingress configuration
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/auth-type: basic
+      nginx.ingress.kubernetes.io/auth-secret: jaeger-basic-auth
+      nginx.ingress.kubernetes.io/auth-realm: "Jaeger Authentication Required"
+      nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+      nginx.ingress.kubernetes.io/configuration-snippet: |
+        more_set_headers "X-Frame-Options: SAMEORIGIN";
+        more_set_headers "X-Content-Type-Options: nosniff";
+        more_set_headers "X-XSS-Protection: 1; mode=block";
+    hosts:
+      - host: jaeger.aicorp.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: jaeger-ui-tls
+        hosts:
+          - jaeger.aicorp.com
+  
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+
+# Elasticsearch storage configuration
+storage:
+  type: elasticsearch
+  elasticsearch:
+    host: elasticsearch.observability.svc.cluster.local
+    port: 9200
+    scheme: https
+    user: jaeger
+    password: jaeger-password
+    nodesWanOnly: false
+    useReadWriteAliases: true
+    createIndexTemplates: true
+    version: 8
+    
+    # Index configuration
+    indexPrefix: jaeger
+    indexDateSeparator: "-"
+    indexRolloverFrequencySpans: day
+    indexRolloverFrequencyServices: day
+    indexRolloverFrequencyDependencies: day
+    
+    # Sharding and replication
+    numShards: 3
+    numReplicas: 1
+    
+    # Retention policy
+    maxSpanAge: 72h0m0s
+    maxNumSpans: 10000000
+    
+    # Performance tuning
+    bulkSize: 5000000
+    bulkWorkers: 1
+    bulkActions: 1000
+    bulkFlushInterval: 200ms
+    sniffing: false
+    healthCheckTimeout: 1s
+    
+    # TLS configuration
+    tls:
+      enabled: true
+      ca: /etc/ssl/certs/ca-certificates.crt
+      cert: ""
+      key: ""
+      serverName: ""
+      skipHostVerify: false
+    
+    # Authentication
+    tokenFile: ""
+    
+    # Advanced configuration
+    tags:
+      dotReplacement: "@"
+      include: "http.method,http.status_code,component,error"
+      file: ""
+    
+    # Archive storage
+    archive:
+      enabled: true
+      indexPrefix: jaeger-archive
+      maxSpanAge: 168h0m0s  # 7 days
+
+# Cassandra storage configuration (alternative)
+cassandra:
+  enabled: false
+  config:
+    cluster_name: jaeger
+    datacenter: dc1
+    rack: rack1
+    endpoint: cassandra.observability.svc.cluster.local
+    port: 9042
+    keyspace: jaeger_v1_dc1
+    localDC: dc1
+    username: cassandra
+    password: cassandra
+    
+    # Connection settings
+    connectTimeout: 600ms
+    socketKeepAlive: 0s
+    maxRetryAttempts: 3
+    protoVersion: 4
+    consistency: LOCAL_ONE
+    disableCompression: false
+    
+    # TLS configuration
+    tls:
+      enabled: false
+      ca: ""
+      cert: ""
+      key: ""
+      serverName: ""
+      skipHostVerify: false
+    
+    # Keyspace configuration
+    replicationFactor: 2
+    
+    # Span index configuration
+    spanStoreWriteCacheTTL: 12h0m0s
+    indexFilter:
+      blacklist: ""
+      whitelist: ""
+
+# Kafka configuration for span ingestion
+kafka:
+  enabled: false
+  config:
+    brokers:
+      - kafka.observability.svc.cluster.local:9092
+    topic: jaeger-spans
+    groupID: jaeger-collector
+    clientID: jaeger-collector
+    
+    # Authentication
+    authentication: none
+    sasl:
+      mechanism: PLAIN
+      username: ""
+      password: ""
+    
+    # TLS configuration
+    tls:
+      enabled: false
+      ca: ""
+      cert: ""
+      key: ""
+      serverName: ""
+      skipHostVerify: false
+    
+    # Consumer configuration
+    consumer:
+      topic: jaeger-spans
+      brokers:
+        - kafka.observability.svc.cluster.local:9092
+      groupID: jaeger-ingester
+      clientID: jaeger-ingester
+      batchSize: 100
+      batchLinger: 1s
+      fetchMinBytes: 1
+      fetchMaxWait: 500ms
+      offsetsInitial: newest
+    
+    # Producer configuration
+    producer:
+      topic: jaeger-spans
+      brokers:
+        - kafka.observability.svc.cluster.local:9092
+      requiredAcks: local
+      compression: none
+      compressionLevel: 6
+      batchSize: 100
+      batchLinger: 1s
+      maxMessageBytes: 1000000
+
+# Ingester configuration (for Kafka)
+ingester:
+  enabled: false
+  image:
+    repository: jaegertracing/jaeger-ingester
+    tag: "1.51.0"
+    pullPolicy: IfNotPresent
+  
+  # Replica configuration
+  replicaCount: 1
+  
+  # Resource allocation
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 200m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  
+  # Ingester configuration
+  cmdlineParams:
+    ingester.parallelism: 1000
+    ingester.deadlockInterval: 1m0s
+    
+    # Kafka configuration
+    kafka.consumer.topic: jaeger-spans
+    kafka.consumer.brokers: kafka.observability.svc.cluster.local:9092
+    kafka.consumer.group-id: jaeger-ingester
+    
+    # Storage configuration
+    span-storage.type: elasticsearch
+
+# Service Monitor for Prometheus integration
+serviceMonitor:
+  enabled: true
+  namespace: observability
+  labels:
+    app: jaeger
+    release: prometheus
+  interval: 30s
+  scrapeTimeout: 10s
+  
+  # Collector metrics
+  collector:
+    enabled: true
+    port: 14269
+    path: /metrics
+  
+  # Query metrics
+  query:
+    enabled: true
+    port: 16687
+    path: /metrics
+  
+  # Agent metrics
+  agent:
+    enabled: true
+    port: 14271
+    path: /metrics
+
+# Network policies
+networkPolicy:
+  enabled: true
+  
+  # Ingress rules
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: aic-website-prod
+        - namespaceSelector:
+            matchLabels:
+              name: aic-website-staging
+        - namespaceSelector:
+            matchLabels:
+              name: aic-website-dev
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: linkerd
+        - namespaceSelector:
+            matchLabels:
+              name: kong
+      ports:
+        - protocol: TCP
+          port: 14250  # Collector gRPC
+        - protocol: TCP
+          port: 14268  # Collector HTTP
+        - protocol: TCP
+          port: 6831   # Agent compact
+        - protocol: TCP
+          port: 6832   # Agent binary
+        - protocol: TCP
+          port: 5775   # Agent Zipkin
+        - protocol: TCP
+          port: 4317   # OTLP gRPC
+        - protocol: TCP
+          port: 4318   # OTLP HTTP
+    
+    # Monitoring access
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 14269  # Collector metrics
+        - protocol: TCP
+          port: 16687  # Query metrics
+        - protocol: TCP
+          port: 14271  # Agent metrics
+    
+    # UI access
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 16686  # Query UI
+  
+  # Egress rules
+  egress:
+    # Elasticsearch access
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: observability
+      ports:
+        - protocol: TCP
+          port: 9200
+    
+    # DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    
+    # External services
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+
+# RBAC configuration
+rbac:
+  create: true
+  
+  # Service account
+  serviceAccount:
+    create: true
+    name: jaeger
+    annotations: {}
+  
+  # Cluster role
+  clusterRole:
+    create: true
+    rules:
+      - apiGroups: [""]
+        resources: ["pods", "services", "endpoints"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "replicasets"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["extensions", "networking.k8s.io"]
+        resources: ["ingresses"]
+        verbs: ["get", "list", "watch"]
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  capabilities:
+    drop:
+      - ALL
+
+# Additional labels and annotations
+commonLabels:
+  app.kubernetes.io/part-of: observability-stack
+  app.kubernetes.io/managed-by: helm
+  environment: production
+
+commonAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "14269"
+  prometheus.io/path: "/metrics"
+
+# Persistence configuration
+persistence:
+  enabled: false
+  storageClass: gp3
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+# Init containers
+initContainers:
+  # Elasticsearch index template creation
+  - name: create-index-templates
+    image: curlimages/curl:8.4.0
+    command:
+      - /bin/sh
+      - -c
+      - |
+        until curl -k -u jaeger:jaeger-password https://elasticsearch.observability.svc.cluster.local:9200/_cluster/health?wait_for_status=yellow&timeout=30s; do
+          echo "Waiting for Elasticsearch..."
+          sleep 5
+        done
+        echo "Elasticsearch is ready"
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+
+# Extra environment variables
+extraEnvVars:
+  - name: JAEGER_DISABLED
+    value: "false"
+  - name: JAEGER_SAMPLER_TYPE
+    value: "remote"
+  - name: JAEGER_SAMPLER_MANAGER_HOST_PORT
+    value: "jaeger-agent.observability.svc.cluster.local:5778"
+  - name: JAEGER_REPORTER_LOG_SPANS
+    value: "false"
+  - name: JAEGER_REPORTER_MAX_QUEUE_SIZE
+    value: "1000"
+  - name: JAEGER_REPORTER_FLUSH_INTERVAL
+    value: "1s"
+  - name: JAEGER_TAGS
+    value: "cluster=aic-website,environment=production"
+
+# Sidecar containers
+sidecars: []
+
+# Volume mounts
+extraVolumeMounts: []
+
+# Volumes
+extraVolumes: []
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Priority class
+priorityClassName: ""
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "14269"
+  prometheus.io/path: "/metrics"
+  cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+
+# Service annotations
+serviceAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "14269"
+  prometheus.io/path: "/metrics"

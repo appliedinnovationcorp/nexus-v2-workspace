@@ -1,0 +1,212 @@
+# GitLab CI Environment Configuration for AIC Website
+# This file defines environment-specific configurations for the CI/CD pipeline
+
+environments:
+  development:
+    branch: develop
+    kubernetes:
+      cluster: aic-dev-cluster
+      namespace: aic-website-dev
+      context: dev-context
+    database:
+      host: postgres-dev.aicorp.com
+      port: 5432
+      name: aic_website_dev
+    redis:
+      host: redis-dev.aicorp.com
+      port: 6379
+    resources:
+      cpu_request: "100m"
+      cpu_limit: "500m"
+      memory_request: "128Mi"
+      memory_limit: "512Mi"
+      replicas: 1
+    ingress:
+      host: dev.aic-website.com
+      tls_enabled: true
+      cert_issuer: letsencrypt-staging
+    monitoring:
+      enabled: true
+      prometheus_scrape: true
+      log_level: debug
+    features:
+      debug_mode: true
+      performance_monitoring: true
+      security_headers: true
+    aws:
+      region: us-west-2
+      role_arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitLabCI-Dev"
+      s3_bucket: aic-website-dev-assets
+      cloudfront_distribution: E1234567890DEV
+
+  staging:
+    branch: staging
+    kubernetes:
+      cluster: aic-staging-cluster
+      namespace: aic-website-staging
+      context: staging-context
+    database:
+      host: postgres-staging.aicorp.com
+      port: 5432
+      name: aic_website_staging
+    redis:
+      host: redis-staging.aicorp.com
+      port: 6379
+    resources:
+      cpu_request: "200m"
+      cpu_limit: "1000m"
+      memory_request: "256Mi"
+      memory_limit: "1Gi"
+      replicas: 2
+    ingress:
+      host: staging.aic-website.com
+      tls_enabled: true
+      cert_issuer: letsencrypt-prod
+    monitoring:
+      enabled: true
+      prometheus_scrape: true
+      log_level: info
+    features:
+      debug_mode: false
+      performance_monitoring: true
+      security_headers: true
+      rate_limiting: true
+    aws:
+      region: us-west-2
+      role_arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitLabCI-Staging"
+      s3_bucket: aic-website-staging-assets
+      cloudfront_distribution: E1234567890STG
+
+  production:
+    branch: main
+    kubernetes:
+      cluster: aic-prod-cluster
+      namespace: aic-website-prod
+      context: prod-context
+    database:
+      host: postgres-prod.aicorp.com
+      port: 5432
+      name: aic_website_prod
+    redis:
+      host: redis-prod.aicorp.com
+      port: 6379
+    resources:
+      cpu_request: "500m"
+      cpu_limit: "2000m"
+      memory_request: "512Mi"
+      memory_limit: "2Gi"
+      replicas: 3
+    ingress:
+      host: aic-website.com
+      tls_enabled: true
+      cert_issuer: letsencrypt-prod
+    monitoring:
+      enabled: true
+      prometheus_scrape: true
+      log_level: warn
+    features:
+      debug_mode: false
+      performance_monitoring: true
+      security_headers: true
+      rate_limiting: true
+      cdn_enabled: true
+    aws:
+      region: us-west-2
+      role_arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitLabCI-Prod"
+      s3_bucket: aic-website-prod-assets
+      cloudfront_distribution: E1234567890PRD
+
+# Global Configuration
+global:
+  image:
+    registry: harbor.aicorp.com
+    project: aic-website
+    pull_policy: Always
+  
+  security:
+    trivy:
+      severity_threshold: ["HIGH", "CRITICAL"]
+      ignore_unfixed: false
+      timeout: "10m"
+    sonarqube:
+      quality_gate: true
+      coverage_threshold: 80
+    
+  notifications:
+    slack:
+      channels:
+        success: "#deployments"
+        failure: "#alerts"
+        security: "#security-alerts"
+    email:
+      security_team: ["security@aicorp.com"]
+      devops_team: ["devops@aicorp.com"]
+  
+  testing:
+    unit_tests:
+      enabled: true
+      coverage_threshold: 80
+    integration_tests:
+      enabled: true
+      timeout: "15m"
+    e2e_tests:
+      enabled: true
+      timeout: "30m"
+      browser: "chrome"
+    performance_tests:
+      enabled: true
+      duration: "5m"
+      virtual_users: 50
+  
+  deployment:
+    strategy: rolling_update
+    max_unavailable: 1
+    max_surge: 1
+    timeout: "10m"
+    rollback_on_failure: true
+  
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    retention_days: 30
+  
+  monitoring:
+    prometheus:
+      scrape_interval: "30s"
+      evaluation_interval: "30s"
+    grafana:
+      dashboard_refresh: "5s"
+    elasticsearch:
+      index_pattern: "aic-website-*"
+      retention_days: 90
+
+# Feature Flags
+feature_flags:
+  enable_new_ui: false
+  enable_ai_features: true
+  enable_analytics: true
+  enable_caching: true
+  enable_compression: true
+  enable_security_headers: true
+  enable_rate_limiting: true
+  enable_cors: true
+
+# Third-party Integrations
+integrations:
+  github:
+    enabled: false
+  jenkins:
+    enabled: true
+    base_url: "https://jenkins.aicorp.com"
+    job_timeout: "30m"
+  harbor:
+    enabled: true
+    project_public: false
+    vulnerability_scanning: true
+  sonarqube:
+    enabled: true
+    project_key: "aic-website"
+  datadog:
+    enabled: false
+  newrelic:
+    enabled: false

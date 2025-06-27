@@ -1,0 +1,310 @@
+version: '3.8'
+
+services:
+  # Enhanced Saga Orchestrator - Primary Node
+  saga-orchestrator-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: saga-orchestrator-1
+    environment:
+      - NODE_ID=node-1
+      - CLUSTER_ENABLED=true
+      - CLUSTER_NODES=saga-orchestrator-1:8080,saga-orchestrator-2:8080,saga-orchestrator-3:8080
+      - DATABASE_URL=postgresql://saga:saga123@postgres:5432/saga_orchestrator
+      - REDIS_URL=redis://redis:6379/0
+      - EVENT_STORE_URL=postgresql://saga:saga123@postgres:5432/saga_events
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - LOG_LEVEL=INFO
+      - METRICS_ENABLED=true
+      - TRACING_ENABLED=true
+      - AUTH_ENABLED=true
+      - RATE_LIMIT_ENABLED=true
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+      - jaeger
+    networks:
+      - saga-network
+    volumes:
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Enhanced Saga Orchestrator - Secondary Node
+  saga-orchestrator-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: saga-orchestrator-2
+    environment:
+      - NODE_ID=node-2
+      - CLUSTER_ENABLED=true
+      - CLUSTER_NODES=saga-orchestrator-1:8080,saga-orchestrator-2:8080,saga-orchestrator-3:8080
+      - DATABASE_URL=postgresql://saga:saga123@postgres:5432/saga_orchestrator
+      - REDIS_URL=redis://redis:6379/0
+      - EVENT_STORE_URL=postgresql://saga:saga123@postgres:5432/saga_events
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - LOG_LEVEL=INFO
+      - PORT=8081
+    ports:
+      - "8081:8081"
+    depends_on:
+      - postgres
+      - redis
+      - jaeger
+    networks:
+      - saga-network
+    volumes:
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Enhanced Saga Orchestrator - Tertiary Node
+  saga-orchestrator-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: saga-orchestrator-3
+    environment:
+      - NODE_ID=node-3
+      - CLUSTER_ENABLED=true
+      - CLUSTER_NODES=saga-orchestrator-1:8080,saga-orchestrator-2:8080,saga-orchestrator-3:8080
+      - DATABASE_URL=postgresql://saga:saga123@postgres:5432/saga_orchestrator
+      - REDIS_URL=redis://redis:6379/0
+      - EVENT_STORE_URL=postgresql://saga:saga123@postgres:5432/saga_events
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - LOG_LEVEL=INFO
+      - PORT=8082
+    ports:
+      - "8082:8082"
+    depends_on:
+      - postgres
+      - redis
+      - jaeger
+    networks:
+      - saga-network
+    volumes:
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: saga-postgres
+    environment:
+      - POSTGRES_DB=saga_orchestrator
+      - POSTGRES_USER=saga
+      - POSTGRES_PASSWORD=saga123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - saga-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saga -d saga_orchestrator"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: saga-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - saga-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Jaeger Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.45
+    container_name: saga-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector HTTP
+      - "14250:14250"  # Jaeger collector gRPC
+    networks:
+      - saga-network
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:v2.44.0
+    container_name: saga-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - saga-network
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:9.5.2
+    container_name: saga-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - saga-network
+    depends_on:
+      - prometheus
+
+  # Load Balancer (HAProxy)
+  load-balancer:
+    image: haproxy:2.8-alpine
+    container_name: saga-load-balancer
+    ports:
+      - "80:80"
+      - "8404:8404"  # HAProxy stats
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+    networks:
+      - saga-network
+    depends_on:
+      - saga-orchestrator-1
+      - saga-orchestrator-2
+      - saga-orchestrator-3
+
+  # Admin Dashboard
+  admin-dashboard:
+    build:
+      context: ./admin-dashboard
+      dockerfile: Dockerfile
+    container_name: saga-admin-dashboard
+    environment:
+      - REACT_APP_API_URL=http://load-balancer
+      - REACT_APP_JAEGER_URL=http://localhost:16686
+      - REACT_APP_GRAFANA_URL=http://localhost:3000
+    ports:
+      - "3001:3000"
+    networks:
+      - saga-network
+    depends_on:
+      - load-balancer
+
+  # Event Store (EventStore DB)
+  eventstore:
+    image: eventstore/eventstore:22.10.0-buster-slim
+    container_name: saga-eventstore
+    environment:
+      - EVENTSTORE_CLUSTER_SIZE=1
+      - EVENTSTORE_RUN_PROJECTIONS=All
+      - EVENTSTORE_START_STANDARD_PROJECTIONS=true
+      - EVENTSTORE_EXT_TCP_PORT=1113
+      - EVENTSTORE_HTTP_PORT=2113
+      - EVENTSTORE_INSECURE=true
+      - EVENTSTORE_ENABLE_EXTERNAL_TCP=true
+      - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
+    ports:
+      - "1113:1113"  # TCP
+      - "2113:2113"  # HTTP
+    volumes:
+      - eventstore_data:/var/lib/eventstore
+    networks:
+      - saga-network
+
+  # Message Queue (RabbitMQ)
+  rabbitmq:
+    image: rabbitmq:3.11-management-alpine
+    container_name: saga-rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=saga
+      - RABBITMQ_DEFAULT_PASS=saga123
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - saga-network
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+  # Elasticsearch (for logging)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+    container_name: saga-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - saga-network
+
+  # Kibana (for log visualization)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.8.0
+    container_name: saga-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    networks:
+      - saga-network
+    depends_on:
+      - elasticsearch
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  eventstore_data:
+  rabbitmq_data:
+  elasticsearch_data:
+
+networks:
+  saga-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

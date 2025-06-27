@@ -1,0 +1,438 @@
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: aic-website-services
+  labels:
+    app: aic-website
+spec:
+  selector:
+    matchLabels:
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aic-website-alerts
+  labels:
+    app: aic-website
+spec:
+  groups:
+  - name: aic-website.rules
+    rules:
+    # High CPU usage
+    - alert: HighCPUUsage
+      expr: rate(container_cpu_usage_seconds_total{namespace="aic-website-prod"}[5m]) * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High CPU usage detected"
+        description: "CPU usage is above 80% for {{ $labels.pod }} in namespace {{ $labels.namespace }}"
+    
+    # High memory usage
+    - alert: HighMemoryUsage
+      expr: (container_memory_usage_bytes{namespace="aic-website-prod"} / container_spec_memory_limit_bytes{namespace="aic-website-prod"}) * 100 > 85
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High memory usage detected"
+        description: "Memory usage is above 85% for {{ $labels.pod }} in namespace {{ $labels.namespace }}"
+    
+    # Pod restart rate
+    - alert: HighPodRestartRate
+      expr: rate(kube_pod_container_status_restarts_total{namespace="aic-website-prod"}[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High pod restart rate"
+        description: "Pod {{ $labels.pod }} is restarting frequently"
+    
+    # Service down
+    - alert: ServiceDown
+      expr: up{job=~"auth-service|user-service|content-service|notification-service"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Service is down"
+        description: "{{ $labels.job }} service is down"
+    
+    # High response time
+    - alert: HighResponseTime
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{namespace="aic-website-prod"}[5m])) > 2
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High response time"
+        description: "95th percentile response time is above 2 seconds for {{ $labels.service }}"
+    
+    # High error rate
+    - alert: HighErrorRate
+      expr: rate(http_requests_total{namespace="aic-website-prod",status=~"5.."}[5m]) / rate(http_requests_total{namespace="aic-website-prod"}[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "High error rate"
+        description: "Error rate is above 5% for {{ $labels.service }}"
+    
+    # Database connection issues
+    - alert: DatabaseConnectionIssues
+      expr: rate(database_connection_errors_total{namespace="aic-website-prod"}[5m]) > 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Database connection issues"
+        description: "Database connection errors detected for {{ $labels.service }}"
+    
+    # Redis connection issues
+    - alert: RedisConnectionIssues
+      expr: rate(redis_connection_errors_total{namespace="aic-website-prod"}[5m]) > 0
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Redis connection issues"
+        description: "Redis connection errors detected for {{ $labels.service }}"
+    
+    # Disk space usage
+    - alert: HighDiskUsage
+      expr: (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_free_bytes{mountpoint="/"}) / node_filesystem_size_bytes{mountpoint="/"} * 100 > 85
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High disk usage"
+        description: "Disk usage is above 85% on {{ $labels.instance }}"
+    
+    # Certificate expiration
+    - alert: CertificateExpiringSoon
+      expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 30
+      for: 1h
+      labels:
+        severity: warning
+      annotations:
+        summary: "SSL certificate expiring soon"
+        description: "SSL certificate for {{ $labels.instance }} expires in less than 30 days"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+data:
+  aic-website-overview.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "AIC Website Overview",
+        "tags": ["aic-website"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{namespace=\"aic-website-prod\"}[5m])) by (service)",
+                "legendFormat": "{{ service }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Requests/sec"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Response Time",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=\"aic-website-prod\"}[5m])) by (le, service))",
+                "legendFormat": "95th percentile - {{ service }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Seconds"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Error Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{namespace=\"aic-website-prod\",status=~\"5..\"}[5m])) by (service) / sum(rate(http_requests_total{namespace=\"aic-website-prod\"}[5m])) by (service)",
+                "legendFormat": "{{ service }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Error Rate",
+                "max": 1,
+                "min": 0
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "CPU Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"aic-website-prod\"}[5m])) by (pod) * 100",
+                "legendFormat": "{{ pod }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "CPU %"
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "title": "Memory Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(container_memory_usage_bytes{namespace=\"aic-website-prod\"}) by (pod) / 1024 / 1024",
+                "legendFormat": "{{ pod }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Memory (MB)"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Active Connections",
+            "type": "singlestat",
+            "targets": [
+              {
+                "expr": "sum(database_connections_active{namespace=\"aic-website-prod\"})"
+              }
+            ]
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "30s"
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secret
+              key: admin-password
+        - name: GF_INSTALL_PLUGINS
+          value: "grafana-piechart-panel,grafana-worldmap-panel"
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        - name: grafana-dashboards
+          mountPath: /etc/grafana/provisioning/dashboards
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: grafana-storage
+        persistentVolumeClaim:
+          claimName: grafana-pvc
+      - name: grafana-dashboards
+        configMap:
+          name: grafana-dashboards
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: gp2
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-secret
+type: Opaque
+data:
+  admin-password: YWRtaW5fcGFzc3dvcmRfMTIz # admin_password_123
+---
+# Alertmanager configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'smtp.gmail.com:587'
+      smtp_from: 'alerts@aic-website.com'
+      smtp_auth_username: 'alerts@aic-website.com'
+      smtp_auth_password: 'your-app-password'
+    
+    route:
+      group_by: ['alertname']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+      receiver: 'web.hook'
+      routes:
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+      - match:
+          severity: warning
+        receiver: 'warning-alerts'
+    
+    receivers:
+    - name: 'web.hook'
+      webhook_configs:
+      - url: 'http://localhost:5001/'
+    
+    - name: 'critical-alerts'
+      email_configs:
+      - to: 'admin@aic-website.com'
+        subject: 'CRITICAL: {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          {{ end }}
+      slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#alerts'
+        title: 'CRITICAL Alert'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+    
+    - name: 'warning-alerts'
+      email_configs:
+      - to: 'team@aic-website.com'
+        subject: 'WARNING: {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          {{ end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:latest
+        ports:
+        - containerPort: 9093
+        args:
+        - '--config.file=/etc/alertmanager/alertmanager.yml'
+        - '--storage.path=/alertmanager'
+        - '--web.external-url=http://localhost:9093'
+        volumeMounts:
+        - name: alertmanager-config
+          mountPath: /etc/alertmanager
+        - name: alertmanager-storage
+          mountPath: /alertmanager
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: alertmanager-config
+        configMap:
+          name: alertmanager-config
+      - name: alertmanager-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  labels:
+    app: alertmanager
+spec:
+  selector:
+    app: alertmanager
+  ports:
+  - port: 9093
+    targetPort: 9093
+    protocol: TCP
+  type: ClusterIP

@@ -48,5 +48,11 @@
   "engines": {
     "node": ">=18.17.0",
     "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "@payloadcms/db-mongodb": "^3.43.0",
+    "@payloadcms/next": "^3.43.0",
+    "@payloadcms/richtext-lexical": "^3.43.0",
+    "payload": "^3.43.0"
   }
 }

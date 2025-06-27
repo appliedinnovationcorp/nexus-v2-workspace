@@ -1,0 +1,98 @@
+apiVersion: configuration.konghq.com/v1
+kind: KongIngress
+metadata:
+  name: api-gateway-config
+  namespace: api-gateway
+  labels:
+    app: kong
+    part-of: aic-website
+route:
+  protocols:
+    - https
+  strip_path: true
+  preserve_host: true
+  https_redirect_status_code: 301
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend-api-ingress
+  namespace: backend-services
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/override: api-gateway-config
+    konghq.com/plugins: oidc-auth
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - api.example.com
+    secretName: api-tls
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      - path: /v1
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-api
+            port:
+              number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-services-ingress
+  namespace: ai-services
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/override: api-gateway-config
+    konghq.com/plugins: oidc-auth
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - api.example.com
+    secretName: api-tls
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      - path: /v1/ai
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-services
+            port:
+              number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend-ingress
+  namespace: frontend
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/override: api-gateway-config
+    konghq.com/plugins: oidc-auth-frontend
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - www.example.com
+    secretName: frontend-tls
+  rules:
+  - host: www.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80

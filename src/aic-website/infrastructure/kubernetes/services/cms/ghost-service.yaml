@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ghost-cms
+  namespace: cms
+  labels:
+    app: ghost-cms
+    part-of: aic-website
+spec:
+  selector:
+    app: ghost-cms
+  ports:
+    - port: 80
+      targetPort: 2368
+      protocol: TCP
+      name: http
+  type: ClusterIP

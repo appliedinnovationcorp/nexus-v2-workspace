@@ -1,0 +1,1140 @@
+openapi: 3.0.3
+info:
+  title: AIC Website AI Services API
+  description: |
+    API documentation for the AIC Website AI Services.
+    
+    This API provides access to AI-powered features including content generation,
+    image analysis, recommendation engine, and natural language processing.
+  version: 1.0.0
+  contact:
+    name: AIC Development Team
+    email: dev@example.com
+    url: https://developer.example.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.example.com/ai/v1
+    description: Production AI API Server
+  - url: https://staging-api.example.com/ai/v1
+    description: Staging AI API Server
+  - url: https://dev-api.example.com/ai/v1
+    description: Development AI API Server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Content Generation
+    description: AI-powered content generation
+  - name: Image Analysis
+    description: AI-powered image analysis
+  - name: Recommendations
+    description: AI-powered recommendation engine
+  - name: NLP
+    description: Natural Language Processing capabilities
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns the health status of the AI API
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: API is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health/ready:
+    get:
+      summary: Readiness check endpoint
+      description: Returns the readiness status of the AI API
+      operationId: getReadiness
+      tags:
+        - Health
+      responses:
+        '200':
+          description: API is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: API is not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /content/generate:
+    post:
+      summary: Generate content
+      description: Generates content based on the provided prompt and parameters
+      operationId: generateContent
+      tags:
+        - Content Generation
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContentGenerationRequest'
+      responses:
+        '200':
+          description: Content generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentGenerationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /content/summarize:
+    post:
+      summary: Summarize content
+      description: Summarizes the provided content
+      operationId: summarizeContent
+      tags:
+        - Content Generation
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummarizeRequest'
+      responses:
+        '200':
+          description: Content summarized successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummarizeResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /image/analyze:
+    post:
+      summary: Analyze image
+      description: Analyzes the provided image and returns insights
+      operationId: analyzeImage
+      tags:
+        - Image Analysis
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: The image to analyze
+                features:
+                  type: array
+                  items:
+                    type: string
+                    enum: [objects, faces, labels, text, colors, moderation]
+                  description: The features to analyze
+              required:
+                - image
+      responses:
+        '200':
+          description: Image analyzed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageAnalysisResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Image too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /image/generate:
+    post:
+      summary: Generate image
+      description: Generates an image based on the provided prompt
+      operationId: generateImage
+      tags:
+        - Image Analysis
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageGenerationRequest'
+      responses:
+        '200':
+          description: Image generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageGenerationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /recommendations/content:
+    post:
+      summary: Get content recommendations
+      description: Returns content recommendations based on user preferences and behavior
+      operationId: getContentRecommendations
+      tags:
+        - Recommendations
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContentRecommendationRequest'
+      responses:
+        '200':
+          description: Recommendations generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentRecommendationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /recommendations/products:
+    post:
+      summary: Get product recommendations
+      description: Returns product recommendations based on user preferences and behavior
+      operationId: getProductRecommendations
+      tags:
+        - Recommendations
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductRecommendationRequest'
+      responses:
+        '200':
+          description: Recommendations generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductRecommendationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /nlp/sentiment:
+    post:
+      summary: Analyze sentiment
+      description: Analyzes the sentiment of the provided text
+      operationId: analyzeSentiment
+      tags:
+        - NLP
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SentimentAnalysisRequest'
+      responses:
+        '200':
+          description: Sentiment analyzed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SentimentAnalysisResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /nlp/entities:
+    post:
+      summary: Extract entities
+      description: Extracts entities from the provided text
+      operationId: extractEntities
+      tags:
+        - NLP
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityExtractionRequest'
+      responses:
+        '200':
+          description: Entities extracted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityExtractionResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /nlp/keywords:
+    post:
+      summary: Extract keywords
+      description: Extracts keywords from the provided text
+      operationId: extractKeywords
+      tags:
+        - NLP
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeywordExtractionRequest'
+      responses:
+        '200':
+          description: Keywords extracted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeywordExtractionResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        models:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              version:
+                type: string
+              status:
+                type: string
+                enum: [loaded, loading, failed]
+            required:
+              - name
+              - version
+              - status
+      required:
+        - status
+        - version
+        - timestamp
+        - models
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        statusCode:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        path:
+          type: string
+      required:
+        - error
+        - message
+        - statusCode
+        - timestamp
+
+    ContentGenerationRequest:
+      type: object
+      properties:
+        prompt:
+          type: string
+          description: The prompt to generate content from
+        maxTokens:
+          type: integer
+          description: Maximum number of tokens to generate
+          minimum: 1
+          maximum: 4000
+          default: 1000
+        temperature:
+          type: number
+          description: Controls randomness (0.0 = deterministic, 1.0 = creative)
+          minimum: 0.0
+          maximum: 1.0
+          default: 0.7
+        topP:
+          type: number
+          description: Controls diversity via nucleus sampling
+          minimum: 0.0
+          maximum: 1.0
+          default: 0.9
+        format:
+          type: string
+          description: The format of the generated content
+          enum: [text, html, markdown, json]
+          default: text
+      required:
+        - prompt
+
+    ContentGenerationResponse:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The generated content
+        usage:
+          type: object
+          properties:
+            promptTokens:
+              type: integer
+            completionTokens:
+              type: integer
+            totalTokens:
+              type: integer
+          required:
+            - promptTokens
+            - completionTokens
+            - totalTokens
+        model:
+          type: string
+          description: The model used for generation
+      required:
+        - content
+        - usage
+        - model
+
+    SummarizeRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: The text to summarize
+        maxLength:
+          type: integer
+          description: Maximum length of the summary in tokens
+          minimum: 10
+          maximum: 1000
+          default: 100
+        format:
+          type: string
+          description: The format of the summary
+          enum: [paragraph, bullets, headline]
+          default: paragraph
+      required:
+        - text
+
+    SummarizeResponse:
+      type: object
+      properties:
+        summary:
+          type: string
+          description: The generated summary
+        usage:
+          type: object
+          properties:
+            inputTokens:
+              type: integer
+            outputTokens:
+              type: integer
+            totalTokens:
+              type: integer
+          required:
+            - inputTokens
+            - outputTokens
+            - totalTokens
+        model:
+          type: string
+          description: The model used for summarization
+      required:
+        - summary
+        - usage
+        - model
+
+    ImageAnalysisResponse:
+      type: object
+      properties:
+        objects:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              confidence:
+                type: number
+                format: float
+              boundingBox:
+                type: object
+                properties:
+                  x:
+                    type: number
+                  y:
+                    type: number
+                  width:
+                    type: number
+                  height:
+                    type: number
+                required:
+                  - x
+                  - y
+                  - width
+                  - height
+            required:
+              - name
+              - confidence
+        faces:
+          type: array
+          items:
+            type: object
+            properties:
+              boundingBox:
+                type: object
+                properties:
+                  x:
+                    type: number
+                  y:
+                    type: number
+                  width:
+                    type: number
+                  height:
+                    type: number
+                required:
+                  - x
+                  - y
+                  - width
+                  - height
+              emotions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [happy, sad, angry, surprised, neutral, fearful, disgusted]
+                    confidence:
+                      type: number
+                      format: float
+                  required:
+                    - type
+                    - confidence
+              age:
+                type: object
+                properties:
+                  low:
+                    type: integer
+                  high:
+                    type: integer
+                required:
+                  - low
+                  - high
+              gender:
+                type: object
+                properties:
+                  value:
+                    type: string
+                    enum: [male, female]
+                  confidence:
+                    type: number
+                    format: float
+                required:
+                  - value
+                  - confidence
+            required:
+              - boundingBox
+        labels:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              confidence:
+                type: number
+                format: float
+            required:
+              - name
+              - confidence
+        text:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+              confidence:
+                type: number
+                format: float
+              boundingBox:
+                type: object
+                properties:
+                  x:
+                    type: number
+                  y:
+                    type: number
+                  width:
+                    type: number
+                  height:
+                    type: number
+                required:
+                  - x
+                  - y
+                  - width
+                  - height
+            required:
+              - text
+              - confidence
+        colors:
+          type: array
+          items:
+            type: object
+            properties:
+              color:
+                type: string
+                format: hex-color
+              pixelPercentage:
+                type: number
+                format: float
+            required:
+              - color
+              - pixelPercentage
+        moderation:
+          type: object
+          properties:
+            isModerated:
+              type: boolean
+            categories:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    enum: [explicit_nudity, suggestive, violence, visually_disturbing, hate_symbols]
+                  confidence:
+                    type: number
+                    format: float
+                required:
+                  - name
+                  - confidence
+          required:
+            - isModerated
+            - categories
+        model:
+          type: string
+          description: The model used for image analysis
+      required:
+        - model
+
+    ImageGenerationRequest:
+      type: object
+      properties:
+        prompt:
+          type: string
+          description: The prompt to generate an image from
+        negativePrompt:
+          type: string
+          description: Elements to avoid in the generated image
+        width:
+          type: integer
+          description: Width of the generated image
+          enum: [256, 512, 768, 1024]
+          default: 512
+        height:
+          type: integer
+          description: Height of the generated image
+          enum: [256, 512, 768, 1024]
+          default: 512
+        numImages:
+          type: integer
+          description: Number of images to generate
+          minimum: 1
+          maximum: 4
+          default: 1
+        style:
+          type: string
+          description: Style of the generated image
+          enum: [realistic, artistic, cartoon, sketch, painting]
+          default: realistic
+      required:
+        - prompt
+
+    ImageGenerationResponse:
+      type: object
+      properties:
+        images:
+          type: array
+          items:
+            type: object
+            properties:
+              url:
+                type: string
+                format: uri
+              width:
+                type: integer
+              height:
+                type: integer
+            required:
+              - url
+              - width
+              - height
+        model:
+          type: string
+          description: The model used for image generation
+      required:
+        - images
+        - model
+
+    ContentRecommendationRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: The ID of the user to get recommendations for
+        contentIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: IDs of content items the user has interacted with
+        contentTypes:
+          type: array
+          items:
+            type: string
+            enum: [article, page, product]
+          description: Types of content to recommend
+        limit:
+          type: integer
+          description: Maximum number of recommendations to return
+          minimum: 1
+          maximum: 50
+          default: 10
+      required:
+        - userId
+
+    ContentRecommendationResponse:
+      type: object
+      properties:
+        recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              title:
+                type: string
+              type:
+                type: string
+                enum: [article, page, product]
+              score:
+                type: number
+                format: float
+                description: Recommendation score (higher is more relevant)
+            required:
+              - id
+              - title
+              - type
+              - score
+        model:
+          type: string
+          description: The model used for recommendations
+      required:
+        - recommendations
+        - model
+
+    ProductRecommendationRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: The ID of the user to get recommendations for
+        productIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: IDs of products the user has interacted with
+        categories:
+          type: array
+          items:
+            type: string
+          description: Product categories to recommend from
+        limit:
+          type: integer
+          description: Maximum number of recommendations to return
+          minimum: 1
+          maximum: 50
+          default: 10
+      required:
+        - userId
+
+    ProductRecommendationResponse:
+      type: object
+      properties:
+        recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              category:
+                type: string
+              price:
+                type: number
+                format: float
+              score:
+                type: number
+                format: float
+                description: Recommendation score (higher is more relevant)
+            required:
+              - id
+              - name
+              - category
+              - price
+              - score
+        model:
+          type: string
+          description: The model used for recommendations
+      required:
+        - recommendations
+        - model
+
+    SentimentAnalysisRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: The text to analyze sentiment for
+        language:
+          type: string
+          description: The language of the text
+          default: en
+      required:
+        - text
+
+    SentimentAnalysisResponse:
+      type: object
+      properties:
+        sentiment:
+          type: string
+          enum: [positive, negative, neutral, mixed]
+        score:
+          type: number
+          format: float
+          description: Sentiment score (-1.0 to 1.0, where -1.0 is very negative and 1.0 is very positive)
+        confidence:
+          type: number
+          format: float
+          description: Confidence in the sentiment analysis (0.0 to 1.0)
+        sentences:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+              sentiment:
+                type: string
+                enum: [positive, negative, neutral, mixed]
+              score:
+                type: number
+                format: float
+            required:
+              - text
+              - sentiment
+              - score
+        model:
+          type: string
+          description: The model used for sentiment analysis
+      required:
+        - sentiment
+        - score
+        - confidence
+        - model
+
+    EntityExtractionRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: The text to extract entities from
+        language:
+          type: string
+          description: The language of the text
+          default: en
+        types:
+          type: array
+          items:
+            type: string
+            enum: [person, location, organization, date, time, quantity, product, event]
+          description: Types of entities to extract
+      required:
+        - text
+
+    EntityExtractionResponse:
+      type: object
+      properties:
+        entities:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+              type:
+                type: string
+                enum: [person, location, organization, date, time, quantity, product, event]
+              confidence:
+                type: number
+                format: float
+              beginOffset:
+                type: integer
+              endOffset:
+                type: integer
+            required:
+              - text
+              - type
+              - confidence
+              - beginOffset
+              - endOffset
+        model:
+          type: string
+          description: The model used for entity extraction
+      required:
+        - entities
+        - model
+
+    KeywordExtractionRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: The text to extract keywords from
+        language:
+          type: string
+          description: The language of the text
+          default: en
+        maxKeywords:
+          type: integer
+          description: Maximum number of keywords to extract
+          minimum: 1
+          maximum: 100
+          default: 10
+      required:
+        - text
+
+    KeywordExtractionResponse:
+      type: object
+      properties:
+        keywords:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+              score:
+                type: number
+                format: float
+              count:
+                type: integer
+            required:
+              - text
+              - score
+              - count
+        model:
+          type: string
+          description: The model used for keyword extraction
+      required:
+        - keywords
+        - model

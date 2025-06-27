@@ -1,0 +1,437 @@
+# GitLab CI/CD Pipeline for AIC Website Microservices
+# This pipeline builds, tests, and deploys all microservices
+
+stages:
+  - validate
+  - test
+  - build
+  - security-scan
+  - deploy-dev
+  - deploy-staging
+  - deploy-prod
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  HARBOR_REGISTRY: $HARBOR_REGISTRY_URL
+  HARBOR_PROJECT: $HARBOR_PROJECT
+  KUBERNETES_NAMESPACE_DEV: aic-website-dev
+  KUBERNETES_NAMESPACE_STAGING: aic-website-staging
+  KUBERNETES_NAMESPACE_PROD: aic-website-prod
+
+# Global before script
+before_script:
+  - echo "Starting CI/CD pipeline for commit $CI_COMMIT_SHA"
+  - echo "Branch: $CI_COMMIT_REF_NAME"
+  - echo "Pipeline ID: $CI_PIPELINE_ID"
+
+# Validate stage
+validate:code-quality:
+  stage: validate
+  image: python:3.11-slim
+  script:
+    - pip install flake8 black isort mypy
+    - echo "Running code quality checks..."
+    - find services -name "*.py" -exec flake8 {} \;
+    - find services -name "*.py" -exec black --check {} \;
+    - find services -name "*.py" -exec isort --check-only {} \;
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+validate:docker-compose:
+  stage: validate
+  image: docker/compose:latest
+  services:
+    - docker:dind
+  script:
+    - echo "Validating docker-compose configuration..."
+    - docker-compose -f docker-compose.yml config
+    - docker-compose -f docker-compose.override.yml config
+  rules:
+    - changes:
+        - docker-compose*.yml
+        - services/*/Dockerfile
+
+# Test stage
+test:auth-service:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - postgres:13
+    - redis:7-alpine
+  variables:
+    POSTGRES_DB: test_auth_db
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_password
+    DATABASE_URL: postgresql://test_user:test_password@postgres:5432/test_auth_db
+    REDIS_URL: redis://redis:6379
+  script:
+    - cd services/auth-service
+    - pip install -r requirements.txt
+    - pip install pytest pytest-asyncio httpx
+    - echo "Running auth service tests..."
+    - pytest tests/ -v --tb=short
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: services/auth-service/coverage.xml
+  rules:
+    - changes:
+        - services/auth-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+test:user-service:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - postgres:13
+    - redis:7-alpine
+  variables:
+    POSTGRES_DB: test_user_db
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_password
+    DATABASE_URL: postgresql://test_user:test_password@postgres:5432/test_user_db
+    REDIS_URL: redis://redis:6379
+  script:
+    - cd services/user-service
+    - pip install -r requirements.txt
+    - pip install pytest pytest-asyncio httpx
+    - echo "Running user service tests..."
+    - pytest tests/ -v --tb=short
+  rules:
+    - changes:
+        - services/user-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+test:content-service:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - postgres:13
+    - redis:7-alpine
+  variables:
+    POSTGRES_DB: test_content_db
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_password
+    DATABASE_URL: postgresql://test_user:test_password@postgres:5432/test_content_db
+    REDIS_URL: redis://redis:6379
+  script:
+    - cd services/content-service
+    - pip install -r requirements.txt
+    - pip install pytest pytest-asyncio httpx moto
+    - echo "Running content service tests..."
+    - pytest tests/ -v --tb=short
+  rules:
+    - changes:
+        - services/content-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+test:notification-service:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - postgres:13
+    - redis:7-alpine
+  variables:
+    POSTGRES_DB: test_notification_db
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_password
+    DATABASE_URL: postgresql://test_user:test_password@postgres:5432/test_notification_db
+    REDIS_URL: redis://redis:6379
+  script:
+    - cd services/notification-service
+    - pip install -r requirements.txt
+    - pip install pytest pytest-asyncio httpx moto
+    - echo "Running notification service tests..."
+    - pytest tests/ -v --tb=short
+  rules:
+    - changes:
+        - services/notification-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# Build stage
+.build_template: &build_template
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - echo "Logging into Harbor registry..."
+    - echo $HARBOR_PASSWORD | docker login $HARBOR_REGISTRY -u $HARBOR_USERNAME --password-stdin
+  script:
+    - cd services/$SERVICE_NAME
+    - echo "Building $SERVICE_NAME image..."
+    - docker build -t $HARBOR_REGISTRY/$HARBOR_PROJECT/$SERVICE_NAME:$CI_COMMIT_SHA .
+    - docker build -t $HARBOR_REGISTRY/$HARBOR_PROJECT/$SERVICE_NAME:latest .
+    - echo "Pushing $SERVICE_NAME image..."
+    - docker push $HARBOR_REGISTRY/$HARBOR_PROJECT/$SERVICE_NAME:$CI_COMMIT_SHA
+    - docker push $HARBOR_REGISTRY/$HARBOR_PROJECT/$SERVICE_NAME:latest
+  after_script:
+    - docker logout $HARBOR_REGISTRY
+
+build:auth-service:
+  <<: *build_template
+  variables:
+    SERVICE_NAME: auth-service
+  rules:
+    - changes:
+        - services/auth-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+build:user-service:
+  <<: *build_template
+  variables:
+    SERVICE_NAME: user-service
+  rules:
+    - changes:
+        - services/user-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+build:content-service:
+  <<: *build_template
+  variables:
+    SERVICE_NAME: content-service
+  rules:
+    - changes:
+        - services/content-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+build:notification-service:
+  <<: *build_template
+  variables:
+    SERVICE_NAME: notification-service
+  rules:
+    - changes:
+        - services/notification-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+build:web-main:
+  stage: build
+  image: node:18-alpine
+  script:
+    - cd apps/web-main
+    - npm ci
+    - npm run build
+    - echo "Building web-main Docker image..."
+    - docker build -t $HARBOR_REGISTRY/$HARBOR_PROJECT/web-main:$CI_COMMIT_SHA .
+    - docker build -t $HARBOR_REGISTRY/$HARBOR_PROJECT/web-main:latest .
+    - docker push $HARBOR_REGISTRY/$HARBOR_PROJECT/web-main:$CI_COMMIT_SHA
+    - docker push $HARBOR_REGISTRY/$HARBOR_PROJECT/web-main:latest
+  services:
+    - docker:dind
+  before_script:
+    - echo $HARBOR_PASSWORD | docker login $HARBOR_REGISTRY -u $HARBOR_USERNAME --password-stdin
+  rules:
+    - changes:
+        - apps/web-main/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# Security scanning stage
+.security_scan_template: &security_scan_template
+  stage: security-scan
+  image: aquasec/trivy:latest
+  script:
+    - echo "Scanning $SERVICE_NAME for vulnerabilities..."
+    - trivy image --exit-code 0 --severity HIGH,CRITICAL --format json -o trivy-report.json $HARBOR_REGISTRY/$HARBOR_PROJECT/$SERVICE_NAME:$CI_COMMIT_SHA
+    - trivy image --exit-code 1 --severity CRITICAL $HARBOR_REGISTRY/$HARBOR_PROJECT/$SERVICE_NAME:$CI_COMMIT_SHA
+  artifacts:
+    reports:
+      container_scanning: trivy-report.json
+    expire_in: 1 week
+  allow_failure: true
+
+security-scan:auth-service:
+  <<: *security_scan_template
+  variables:
+    SERVICE_NAME: auth-service
+  needs: ["build:auth-service"]
+  rules:
+    - changes:
+        - services/auth-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+
+security-scan:user-service:
+  <<: *security_scan_template
+  variables:
+    SERVICE_NAME: user-service
+  needs: ["build:user-service"]
+  rules:
+    - changes:
+        - services/user-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+
+security-scan:content-service:
+  <<: *security_scan_template
+  variables:
+    SERVICE_NAME: content-service
+  needs: ["build:content-service"]
+  rules:
+    - changes:
+        - services/content-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+
+security-scan:notification-service:
+  <<: *security_scan_template
+  variables:
+    SERVICE_NAME: notification-service
+  needs: ["build:notification-service"]
+  rules:
+    - changes:
+        - services/notification-service/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# Deploy to development
+.deploy_dev_template: &deploy_dev_template
+  stage: deploy-dev
+  image: bitnami/kubectl:latest
+  environment:
+    name: development
+    url: https://dev.aic-website.com
+  script:
+    - echo "Deploying $SERVICE_NAME to development..."
+    - kubectl config use-context $DEV_KUBERNETES_CLUSTER
+    - kubectl set image deployment/$SERVICE_NAME $SERVICE_NAME=$HARBOR_REGISTRY/$HARBOR_PROJECT/$SERVICE_NAME:$CI_COMMIT_SHA -n $KUBERNETES_NAMESPACE_DEV
+    - kubectl rollout status deployment/$SERVICE_NAME -n $KUBERNETES_NAMESPACE_DEV --timeout=300s
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+deploy-dev:auth-service:
+  <<: *deploy_dev_template
+  variables:
+    SERVICE_NAME: auth-service
+  needs: ["build:auth-service"]
+
+deploy-dev:user-service:
+  <<: *deploy_dev_template
+  variables:
+    SERVICE_NAME: user-service
+  needs: ["build:user-service"]
+
+deploy-dev:content-service:
+  <<: *deploy_dev_template
+  variables:
+    SERVICE_NAME: content-service
+  needs: ["build:content-service"]
+
+deploy-dev:notification-service:
+  <<: *deploy_dev_template
+  variables:
+    SERVICE_NAME: notification-service
+  needs: ["build:notification-service"]
+
+# Deploy to staging
+.deploy_staging_template: &deploy_staging_template
+  stage: deploy-staging
+  image: bitnami/kubectl:latest
+  environment:
+    name: staging
+    url: https://staging.aic-website.com
+  script:
+    - echo "Deploying $SERVICE_NAME to staging..."
+    - kubectl config use-context $STAGING_KUBERNETES_CLUSTER
+    - kubectl set image deployment/$SERVICE_NAME $SERVICE_NAME=$HARBOR_REGISTRY/$HARBOR_PROJECT/$SERVICE_NAME:$CI_COMMIT_SHA -n $KUBERNETES_NAMESPACE_STAGING
+    - kubectl rollout status deployment/$SERVICE_NAME -n $KUBERNETES_NAMESPACE_STAGING --timeout=300s
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  when: manual
+
+deploy-staging:auth-service:
+  <<: *deploy_staging_template
+  variables:
+    SERVICE_NAME: auth-service
+  needs: ["build:auth-service", "security-scan:auth-service"]
+
+deploy-staging:user-service:
+  <<: *deploy_staging_template
+  variables:
+    SERVICE_NAME: user-service
+  needs: ["build:user-service", "security-scan:user-service"]
+
+deploy-staging:content-service:
+  <<: *deploy_staging_template
+  variables:
+    SERVICE_NAME: content-service
+  needs: ["build:content-service", "security-scan:content-service"]
+
+deploy-staging:notification-service:
+  <<: *deploy_staging_template
+  variables:
+    SERVICE_NAME: notification-service
+  needs: ["build:notification-service", "security-scan:notification-service"]
+
+# Deploy to production
+.deploy_prod_template: &deploy_prod_template
+  stage: deploy-prod
+  image: bitnami/kubectl:latest
+  environment:
+    name: production
+    url: https://aic-website.com
+  script:
+    - echo "Deploying $SERVICE_NAME to production..."
+    - kubectl config use-context $PROD_KUBERNETES_CLUSTER
+    - kubectl set image deployment/$SERVICE_NAME $SERVICE_NAME=$HARBOR_REGISTRY/$HARBOR_PROJECT/$SERVICE_NAME:$CI_COMMIT_SHA -n $KUBERNETES_NAMESPACE_PROD
+    - kubectl rollout status deployment/$SERVICE_NAME -n $KUBERNETES_NAMESPACE_PROD --timeout=300s
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  when: manual
+  allow_failure: false
+
+deploy-prod:auth-service:
+  <<: *deploy_prod_template
+  variables:
+    SERVICE_NAME: auth-service
+  needs: ["deploy-staging:auth-service"]
+
+deploy-prod:user-service:
+  <<: *deploy_prod_template
+  variables:
+    SERVICE_NAME: user-service
+  needs: ["deploy-staging:user-service"]
+
+deploy-prod:content-service:
+  <<: *deploy_prod_template
+  variables:
+    SERVICE_NAME: content-service
+  needs: ["deploy-staging:content-service"]
+
+deploy-prod:notification-service:
+  <<: *deploy_prod_template
+  variables:
+    SERVICE_NAME: notification-service
+  needs: ["deploy-staging:notification-service"]
+
+# Notification jobs
+notify:success:
+  stage: .post
+  image: curlimages/curl:latest
+  script:
+    - |
+      curl -X POST $SLACK_WEBHOOK_URL \
+        -H 'Content-type: application/json' \
+        --data "{\"text\":\"✅ Pipeline succeeded for $CI_PROJECT_NAME on $CI_COMMIT_REF_NAME\"}"
+  rules:
+    - if: $CI_PIPELINE_STATUS == "success" && $CI_COMMIT_BRANCH == "main"
+
+notify:failure:
+  stage: .post
+  image: curlimages/curl:latest
+  script:
+    - |
+      curl -X POST $SLACK_WEBHOOK_URL \
+        -H 'Content-type: application/json' \
+        --data "{\"text\":\"❌ Pipeline failed for $CI_PROJECT_NAME on $CI_COMMIT_REF_NAME\"}"
+  rules:
+    - if: $CI_PIPELINE_STATUS == "failed"

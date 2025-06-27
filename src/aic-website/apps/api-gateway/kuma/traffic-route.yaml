@@ -1,0 +1,17 @@
+apiVersion: kuma.io/v1alpha1
+kind: TrafficRoute
+mesh: aic-mesh
+metadata:
+  name: route-all-traffic
+spec:
+  sources:
+    - match:
+        kuma.io/service: '*'
+  destinations:
+    - match:
+        kuma.io/service: '*'
+  conf:
+    loadBalancer:
+      roundRobin: {}
+    destination:
+      kuma.io/service: ${destination.service}

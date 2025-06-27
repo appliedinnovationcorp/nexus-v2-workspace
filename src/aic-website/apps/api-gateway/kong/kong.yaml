@@ -1,0 +1,160 @@
+_format_version: "2.1"
+_transform: true
+
+# Services
+services:
+  - name: backend-service
+    url: http://backend:4001
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 60
+          policy: local
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          headers:
+            - Content-Type
+            - Authorization
+            - X-Requested-With
+          credentials: true
+          max_age: 3600
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - X-Service: backend
+    routes:
+      - name: backend-api-route
+        paths:
+          - /api/v1
+        strip_path: true
+        preserve_host: true
+        protocols:
+          - http
+          - https
+
+  - name: ai-services
+    url: http://ai-services:4002
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 30
+          policy: local
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - OPTIONS
+          headers:
+            - Content-Type
+            - Authorization
+          credentials: true
+          max_age: 3600
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - X-Service: ai-services
+    routes:
+      - name: ai-services-route
+        paths:
+          - /api/v1/ai
+        strip_path: true
+        preserve_host: true
+        protocols:
+          - http
+          - https
+
+  - name: ghost-cms
+    url: http://ghost-cms:2368/ghost/api/content
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - OPTIONS
+          headers:
+            - Content-Type
+          credentials: false
+          max_age: 3600
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - X-Service: ghost-cms
+    routes:
+      - name: ghost-cms-route
+        paths:
+          - /api/v1/content
+        strip_path: true
+        preserve_host: true
+        protocols:
+          - http
+          - https
+
+# Consumers
+consumers:
+  - username: frontend-app
+    custom_id: frontend-app-id
+    plugins:
+      - name: key-auth
+        config:
+          key: frontend-app-key
+
+  - username: admin-dashboard
+    custom_id: admin-dashboard-id
+    plugins:
+      - name: key-auth
+        config:
+          key: admin-dashboard-key
+
+# Global plugins
+plugins:
+  - name: key-auth
+    config:
+      key_names:
+        - apikey
+      hide_credentials: true
+  
+  - name: jwt
+    config:
+      claims_to_verify:
+        - exp
+      key_claim_name: kid
+      secret_is_base64: false
+
+  - name: prometheus
+    config:
+      status_code_metrics: true
+      latency_metrics: true
+      bandwidth_metrics: true
+      upstream_health_metrics: true
+
+  - name: request-id
+    config:
+      header_name: X-Request-ID
+      generator: uuid
+      echo_downstream: true
+
+  - name: response-transformer
+    config:
+      add:
+        headers:
+          - X-Powered-By: AIC API Gateway

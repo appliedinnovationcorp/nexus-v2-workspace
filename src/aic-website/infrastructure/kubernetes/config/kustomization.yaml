@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: aic-website-config
+  namespace: default
+
+# Base resources
+resources:
+  - shared-config.yaml
+  - development-config.yaml
+  - staging-config.yaml
+  - production-config.yaml
+
+# Configuration patches for different environments
+patchesStrategicMerge:
+  - environment-patches/development-patch.yaml
+  - environment-patches/staging-patch.yaml
+  - environment-patches/production-patch.yaml
+
+# ConfigMap generators for dynamic configuration
+configMapGenerator:
+  - name: build-info
+    literals:
+      - BUILD_VERSION=2.0.0
+      - BUILD_DATE=2024-06-27
+      - GIT_COMMIT=main
+      - BUILD_NUMBER=1
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: aic-website
+  app.kubernetes.io/version: "2.0.0"
+  app.kubernetes.io/component: configuration
+  app.kubernetes.io/part-of: aic-website
+  app.kubernetes.io/managed-by: kustomize
+
+# Namespace for all resources
+namespace: default
+
+# Images (if any container images need to be managed)
+images: []
+
+# Replicas (for scaling configuration)
+replicas: []

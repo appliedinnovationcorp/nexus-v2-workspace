@@ -1,0 +1,173 @@
+# Conftest Configuration for AIC Website OPA Policies
+# Defines policy enforcement rules and exceptions
+
+policy:
+  # Security policies - strict enforcement
+  - path: policies/security/
+    enforcement: strict
+    namespaces:
+      - backend-services
+      - ai-services
+      - cms
+      - storage
+    
+  # Compliance policies - strict enforcement for production
+  - path: policies/compliance/
+    enforcement: strict
+    namespaces:
+      - backend-services
+      - ai-services
+      - cms
+    exceptions:
+      - namespace: development
+        enforcement: warn
+  
+  # Networking policies - strict enforcement
+  - path: policies/networking/
+    enforcement: strict
+    namespaces:
+      - backend-services
+      - ai-services
+      - cms
+      - api-gateway
+    
+  # Storage policies - strict enforcement for sensitive data
+  - path: policies/storage/
+    enforcement: strict
+    namespaces:
+      - storage
+      - backend-services
+      - ai-services
+      - cms
+
+# Global configuration
+global:
+  # Fail on policy violations
+  fail-on-warn: false
+  
+  # Output format
+  output: json
+  
+  # Include policy metadata in output
+  include-metadata: true
+  
+  # Trace policy evaluation
+  trace: false
+
+# Namespace-specific overrides
+overrides:
+  # Development namespace - warnings only
+  development:
+    enforcement: warn
+    policies:
+      - security/container-security
+      - networking/network-policies
+  
+  # Testing namespace - warnings only
+  testing:
+    enforcement: warn
+    policies:
+      - security/container-security
+      - compliance/data-protection
+  
+  # Staging namespace - strict enforcement
+  staging:
+    enforcement: strict
+    policies:
+      - security/container-security
+      - security/rbac-security
+      - networking/network-policies
+      - compliance/data-protection
+      - storage/storage-security
+  
+  # Production namespaces - strictest enforcement
+  production:
+    enforcement: strict
+    fail-on-warn: true
+    policies:
+      - security/container-security
+      - security/rbac-security
+      - networking/network-policies
+      - compliance/data-protection
+      - storage/storage-security
+
+# Exemptions for system components
+exemptions:
+  # System namespaces
+  - namespace: kube-system
+    policies:
+      - security/container-security
+    reason: "System components require elevated privileges"
+  
+  - namespace: kuma-system
+    policies:
+      - security/container-security
+      - networking/network-policies
+    reason: "Service mesh components require special network access"
+  
+  - namespace: observability
+    policies:
+      - security/container-security
+    reason: "Monitoring components may require elevated access"
+  
+  # Specific workloads
+  - resource: "deployment/prometheus"
+    namespace: observability
+    policies:
+      - security/container-security
+    reason: "Prometheus requires access to cluster metrics"
+  
+  - resource: "deployment/grafana"
+    namespace: observability
+    policies:
+      - security/container-security
+    reason: "Grafana requires specific security context"
+
+# Custom rules
+custom-rules:
+  # AIC-specific security requirements
+  aic-security:
+    - name: "require-aic-labels"
+      description: "All resources must have AIC-specific labels"
+      policy: |
+        package kubernetes.aic.labels
+        deny[msg] {
+          input.kind in ["Deployment", "Service", "Pod"]
+          not input.metadata.labels["app.kubernetes.io/part-of"] == "aic-website"
+          msg := sprintf("%s '%s' must have app.kubernetes.io/part-of=aic-website label", [input.kind, input.metadata.name])
+        }
+    
+    - name: "require-security-contact"
+      description: "All production resources must have security contact"
+      policy: |
+        package kubernetes.aic.security
+        deny[msg] {
+          input.kind in ["Deployment", "Service"]
+          input.metadata.namespace in ["backend-services", "ai-services", "cms"]
+          not input.metadata.annotations["security.aicorp.com/contact"]
+          msg := sprintf("%s '%s' in production must have security contact annotation", [input.kind, input.metadata.name])
+        }
+
+# Integration settings
+integration:
+  # GitLab CI integration
+  gitlab-ci:
+    enabled: true
+    fail-pipeline-on-violation: true
+    generate-report: true
+    report-format: junit
+  
+  # Kubernetes admission controller integration
+  admission-controller:
+    enabled: true
+    webhook-url: "https://opa-admission.aicorp.com/v1/admit"
+    failure-policy: "Fail"
+  
+  # Monitoring integration
+  monitoring:
+    enabled: true
+    metrics-endpoint: "/metrics"
+    prometheus-labels:
+      - policy_name
+      - namespace
+      - resource_kind

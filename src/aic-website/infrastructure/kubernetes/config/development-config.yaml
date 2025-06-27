@@ -1,0 +1,171 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: development-config
+  namespace: backend-services
+  labels:
+    app: aic-website
+    environment: development
+    part-of: aic-website
+data:
+  environment: "development"
+  log-level: "debug"
+  debug-mode: "true"
+  
+  database-config.json: |
+    {
+      "postgresql": {
+        "host": "localhost",
+        "port": 5432,
+        "database": "aic_dev",
+        "ssl": false,
+        "poolSize": 5,
+        "connectionTimeout": 5000,
+        "idleTimeout": 30000,
+        "logQueries": true
+      },
+      "redis": {
+        "host": "localhost",
+        "port": 6379,
+        "database": 0,
+        "keyPrefix": "aic:dev:",
+        "ttl": 300,
+        "maxRetries": 3
+      },
+      "mongodb": {
+        "host": "localhost",
+        "port": 27017,
+        "database": "aic_dev",
+        "authSource": "admin",
+        "ssl": false,
+        "poolSize": 5
+      }
+    }
+  
+  api-config.json: |
+    {
+      "rateLimit": {
+        "enabled": false,
+        "windowMs": 900000,
+        "max": 1000
+      },
+      "cors": {
+        "allowedOrigins": ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+        "credentials": true,
+        "maxAge": 86400
+      },
+      "security": {
+        "helmet": {
+          "contentSecurityPolicy": false,
+          "crossOriginEmbedderPolicy": false
+        },
+        "jwt": {
+          "expiresIn": "24h",
+          "refreshExpiresIn": "7d"
+        }
+      },
+      "cache": {
+        "enabled": true,
+        "ttl": 60,
+        "checkPeriod": 30
+      }
+    }
+  
+  ai-config.json: |
+    {
+      "providers": {
+        "openai": {
+          "enabled": false,
+          "rateLimit": false
+        },
+        "ollama": {
+          "enabled": true,
+          "host": "http://localhost:11434",
+          "timeout": 120000
+        }
+      },
+      "caching": {
+        "enabled": true,
+        "ttl": 1800
+      },
+      "logging": {
+        "level": "debug",
+        "includeInputs": true,
+        "includeOutputs": true
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: development-config
+  namespace: ai-services
+  labels:
+    app: ai-services
+    environment: development
+    part-of: aic-website
+data:
+  environment: "development"
+  log-level: "debug"
+  
+  ai-dev-config.json: |
+    {
+      "providers": {
+        "openai": {
+          "enabled": false,
+          "mockResponses": true
+        },
+        "ollama": {
+          "enabled": true,
+          "host": "http://localhost:11434",
+          "models": {
+            "chat": "llama3:8b-instruct-q4_0",
+            "embedding": "nomic-embed-text:latest"
+          }
+        }
+      },
+      "development": {
+        "mockMode": true,
+        "debugLogging": true,
+        "saveInteractions": true,
+        "bypassRateLimit": true
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: development-config
+  namespace: cms
+  labels:
+    app: ghost-cms
+    environment: development
+    part-of: aic-website
+data:
+  environment: "development"
+  
+  ghost-dev-config.json: |
+    {
+      "url": "http://localhost:2368",
+      "database": {
+        "client": "sqlite3",
+        "connection": {
+          "filename": "/var/lib/ghost/content/data/ghost-dev.db"
+        },
+        "debug": true
+      },
+      "mail": {
+        "transport": "Direct",
+        "options": {
+          "debug": true
+        }
+      },
+      "logging": {
+        "level": "debug",
+        "transports": ["stdout"]
+      },
+      "privacy": {
+        "useUpdateCheck": false,
+        "useGravatar": false
+      }
+    }

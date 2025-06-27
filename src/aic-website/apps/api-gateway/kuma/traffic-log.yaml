@@ -1,0 +1,14 @@
+apiVersion: kuma.io/v1alpha1
+kind: TrafficLog
+mesh: aic-mesh
+metadata:
+  name: all-traffic
+spec:
+  sources:
+    - match:
+        kuma.io/service: '*'
+  destinations:
+    - match:
+        kuma.io/service: '*'
+  conf:
+    backend: file-1

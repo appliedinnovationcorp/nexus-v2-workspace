@@ -1,0 +1,187 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+  labels:
+    app: content-service
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: content-service
+  template:
+    metadata:
+      labels:
+        app: content-service
+        version: v1
+    spec:
+      containers:
+      - name: content-service
+        image: ghcr.io/aic-website/content-service:latest
+        ports:
+        - containerPort: 8002
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: content-service-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: content-service-secrets
+              key: redis-url
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: content-service-secrets
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: content-service-secrets
+              key: aws-secret-access-key
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: S3_BUCKET_NAME
+          value: "aic-website-media"
+        - name: AUTH_SERVICE_URL
+          value: "http://auth-service"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+          value: "http://jaeger-collector:14268/api/traces"
+        - name: OTEL_SERVICE_NAME
+          value: "content-service"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: vault-secrets
+          mountPath: /vault/secrets
+          readOnly: true
+        - name: media-storage
+          mountPath: /tmp/uploads
+      volumes:
+      - name: vault-secrets
+        csi:
+          driver: secrets-store.csi.x-k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "content-service-vault-secrets"
+      - name: media-storage
+        emptyDir:
+          sizeLimit: 1Gi
+      serviceAccountName: content-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: content-service
+  labels:
+    app: content-service
+spec:
+  selector:
+    app: content-service
+  ports:
+  - port: 80
+    targetPort: 8002
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: content-service
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "content-service"
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/content-service-role
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: content-service-secrets
+type: Opaque
+data:
+  database-url: cG9zdGdyZXNxbDovL3VzZXI6cGFzc3dvcmRAbG9jYWxob3N0OjU0MzIvY29udGVudF9kYg==
+  redis-url: cmVkaXM6Ly9sb2NhbGhvc3Q6NjM3OQ==
+  aws-access-key-id: QUtJQUlPU0ZPRE5ON0VYQU1QTEU=
+  aws-secret-access-key: d0phbHJYVXRuRkVNSS9LN01ERU5HL2JQeFJmaUNZRVhBTVBMRUtFWQ==
+---
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: content-service-vault-secrets
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: "http://vault:8200"
+    roleName: "content-service"
+    objects: |
+      - objectName: "database-url"
+        secretPath: "secret/content-service"
+        secretKey: "database-url"
+      - objectName: "redis-url"
+        secretPath: "secret/content-service"
+        secretKey: "redis-url"
+      - objectName: "aws-access-key-id"
+        secretPath: "secret/content-service"
+        secretKey: "aws-access-key-id"
+      - objectName: "aws-secret-access-key"
+        secretPath: "secret/content-service"
+        secretKey: "aws-secret-access-key"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: content-service-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: content-service
+  minReplicas: 3
+  maxReplicas: 15
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: content-service-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: content-service

@@ -1,0 +1,137 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+                apiVersion: v1
+                kind: Pod
+                spec:
+                  containers:
+                  - name: kubectl
+                    image: bitnami/kubectl:1.25
+                    command:
+                    - cat
+                    tty: true
+                  - name: helm
+                    image: alpine/helm:3.11.0
+                    command:
+                    - cat
+                    tty: true
+                  - name: argocd
+                    image: argoproj/argocd-cli:v2.6.7
+                    command:
+                    - cat
+                    tty: true
+            '''
+        }
+    }
+    
+    parameters {
+        string(name: 'IMAGE_TAG', defaultValue: '', description: 'Docker image tag to deploy')
+        choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'production'], description: 'Deployment environment')
+    }
+    
+    stages {
+        stage('Validate Parameters') {
+            steps {
+                script {
+                    if (params.IMAGE_TAG == '') {
+                        error "IMAGE_TAG parameter is required"
+                    }
+                }
+            }
+        }
+        
+        stage('Configure Kubernetes') {
+            steps {
+                container('kubectl') {
+                    withCredentials([file(credentialsId: "${params.ENVIRONMENT}-kubeconfig", variable: 'KUBECONFIG')]) {
+                        sh 'mkdir -p ~/.kube'
+                        sh 'cp $KUBECONFIG ~/.kube/config'
+                        sh 'kubectl config use-context ${params.ENVIRONMENT}'
+                        sh 'kubectl cluster-info'
+                    }
+                }
+            }
+        }
+        
+        stage('Update Helm Values') {
+            steps {
+                container('helm') {
+                    withCredentials([file(credentialsId: "${params.ENVIRONMENT}-kubeconfig", variable: 'KUBECONFIG')]) {
+                        sh '''
+                            mkdir -p ~/.kube
+                            cp $KUBECONFIG ~/.kube/config
+                            
+                            # Clone the GitOps repository
+                            git clone https://github.com/applied-innovation-corp/aic-website-gitops.git
+                            cd aic-website-gitops
+                            
+                            # Update the image tag in the values file
+                            sed -i "s|image: .*|image: ${IMAGE_TAG}|g" environments/${ENVIRONMENT}/values.yaml
+                            
+                            # Commit and push the changes
+                            git config --global user.email "jenkins@example.com"
+                            git config --global user.name "Jenkins CI"
+                            git add environments/${ENVIRONMENT}/values.yaml
+                            git commit -m "Update image tag to ${IMAGE_TAG} for ${ENVIRONMENT} environment"
+                            git push
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy with ArgoCD') {
+            steps {
+                container('argocd') {
+                    withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_TOKEN')]) {
+                        sh '''
+                            # Login to ArgoCD
+                            argocd login --auth-token $ARGOCD_TOKEN argocd.example.com
+                            
+                            # Sync the application
+                            argocd app sync aic-website-${ENVIRONMENT}
+                            
+                            # Wait for sync to complete
+                            argocd app wait aic-website-${ENVIRONMENT} --health
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Verify Deployment') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                        # Wait for deployment to be ready
+                        kubectl -n backend-services rollout status deployment/backend-api --timeout=300s
+                        kubectl -n ai-services rollout status deployment/ai-services --timeout=300s
+                        
+                        # Verify the deployed image
+                        DEPLOYED_IMAGE=$(kubectl -n backend-services get deployment/backend-api -o jsonpath='{.spec.template.spec.containers[0].image}')
+                        if [ "$DEPLOYED_IMAGE" != "${IMAGE_TAG}" ]; then
+                            echo "Deployed image $DEPLOYED_IMAGE does not match expected ${IMAGE_TAG}"
+                            exit 1
+                        fi
+                        
+                        echo "Deployment verified successfully!"
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo "Deployment to ${params.ENVIRONMENT} completed successfully!"
+            // Send success notification
+            slackSend(color: 'good', message: "Deployment to ${params.ENVIRONMENT} completed successfully! Image: ${params.IMAGE_TAG}")
+        }
+        failure {
+            echo "Deployment to ${params.ENVIRONMENT} failed!"
+            // Send failure notification
+            slackSend(color: 'danger', message: "Deployment to ${params.ENVIRONMENT} failed! Image: ${params.IMAGE_TAG}")
+        }
+    }
+}

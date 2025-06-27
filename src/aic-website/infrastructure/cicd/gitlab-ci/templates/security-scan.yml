@@ -1,0 +1,100 @@
+# Security Scan Template for GitLab CI
+# Include this template in your .gitlab-ci.yml file:
+# include:
+#   - local: /infrastructure/cicd/gitlab-ci/templates/security-scan.yml
+
+# SAST (Static Application Security Testing)
+sast:
+  stage: security-scan
+  image: registry.gitlab.com/security-products/sast:latest
+  variables:
+    SAST_EXCLUDED_PATHS: "node_modules,dist,build,coverage"
+    SAST_ANALYZER_IMAGE_TAG: 3
+  script:
+    - /analyzer run
+  artifacts:
+    reports:
+      sast: gl-sast-report.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Dependency Scanning
+dependency-scanning:
+  stage: security-scan
+  image: registry.gitlab.com/security-products/dependency-scanning:latest
+  variables:
+    DS_EXCLUDED_PATHS: "node_modules,dist,build,coverage"
+  script:
+    - /analyzer run
+  artifacts:
+    reports:
+      dependency_scanning: gl-dependency-scanning-report.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Container Scanning
+container-scanning:
+  stage: security-scan
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  variables:
+    CS_DEFAULT_BRANCH_IMAGE: $CI_REGISTRY_IMAGE:latest
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker info
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+  script:
+    - docker run -d --name db arminc/clair-db:latest
+    - docker run -p 6060:6060 --link db:postgres -d --name clair arminc/clair-local-scan:latest
+    - docker pull $CS_DEFAULT_BRANCH_IMAGE
+    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --format json --output trivy-report.json $CS_DEFAULT_BRANCH_IMAGE
+  artifacts:
+    reports:
+      container_scanning: trivy-report.json
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Secret Detection
+secret-detection:
+  stage: security-scan
+  image: registry.gitlab.com/security-products/secret-detection:latest
+  variables:
+    SECRET_DETECTION_EXCLUDED_PATHS: "node_modules,dist,build,coverage"
+  script:
+    - /analyzer run
+  artifacts:
+    reports:
+      secret_detection: gl-secret-detection-report.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# License Scanning
+license-scanning:
+  stage: security-scan
+  image: registry.gitlab.com/gitlab-org/security-products/license-scanning:latest
+  script:
+    - /run.sh analyze .
+  artifacts:
+    reports:
+      license_scanning: gl-license-scanning-report.json
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Security Dashboard
+security-dashboard:
+  stage: security-scan
+  image: alpine:latest
+  script:
+    - echo "Security scan results are available in the Security Dashboard"
+  needs:
+    - sast
+    - dependency-scanning
+    - secret-detection
+    - license-scanning
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

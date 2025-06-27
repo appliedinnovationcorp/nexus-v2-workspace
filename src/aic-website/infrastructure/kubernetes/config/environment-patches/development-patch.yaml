@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: development-config
+  namespace: backend-services
+data:
+  # Override for development-specific settings
+  debug-enabled: "true"
+  log-level: "debug"
+  mock-external-services: "true"
+  
+  # Development-specific database settings
+  database-config.json: |
+    {
+      "postgresql": {
+        "host": "localhost",
+        "port": 5432,
+        "database": "aic_dev",
+        "ssl": false,
+        "logQueries": true,
+        "poolSize": 3
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: development-config
+  namespace: ai-services
+data:
+  # AI services development overrides
+  mock-ai-responses: "true"
+  cost-tracking: "false"
+  debug-mode: "true"

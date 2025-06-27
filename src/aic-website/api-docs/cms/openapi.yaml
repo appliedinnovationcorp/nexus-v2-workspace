@@ -1,0 +1,716 @@
+openapi: 3.0.3
+info:
+  title: AIC Website CMS API
+  description: |
+    API documentation for the AIC Website Content Management System.
+    
+    This API provides access to the headless CMS functionality including posts,
+    pages, authors, tags, and media management.
+  version: 1.0.0
+  contact:
+    name: AIC Development Team
+    email: dev@example.com
+    url: https://developer.example.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://cms.example.com/ghost/api/v3/admin
+    description: Admin API
+  - url: https://cms.example.com/ghost/api/v3/content
+    description: Content API
+
+tags:
+  - name: Authentication
+    description: Authentication endpoints
+  - name: Posts
+    description: Blog post management
+  - name: Pages
+    description: Static page management
+  - name: Authors
+    description: Author management
+  - name: Tags
+    description: Tag management
+  - name: Media
+    description: Media management
+  - name: Settings
+    description: CMS settings management
+
+paths:
+  /session:
+    post:
+      summary: Create session
+      description: Authenticates a user and creates a session
+      operationId: createSession
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionRequest'
+      responses:
+        '201':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /posts:
+    get:
+      summary: Get all posts
+      description: Returns a list of posts
+      operationId: getPosts
+      tags:
+        - Posts
+      security:
+        - AdminAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: filter
+          in: query
+          description: Filter query (e.g., status:'published')
+          required: false
+          schema:
+            type: string
+        - name: include
+          in: query
+          description: Related resources to include
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of posts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create a post
+      description: Creates a new post
+      operationId: createPost
+      tags:
+        - Posts
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostRequest'
+      responses:
+        '201':
+          description: Post created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /posts/{id}:
+    get:
+      summary: Get post by ID
+      description: Returns a post by ID
+      operationId: getPostById
+      tags:
+        - Posts
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Post ID
+          required: true
+          schema:
+            type: string
+        - name: include
+          in: query
+          description: Related resources to include
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Post found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      summary: Update post
+      description: Updates an existing post
+      operationId: updatePost
+      tags:
+        - Posts
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Post ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostRequest'
+      responses:
+        '200':
+          description: Post updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete post
+      description: Deletes an existing post
+      operationId: deletePost
+      tags:
+        - Posts
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Post ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Post deleted successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pages:
+    get:
+      summary: Get all pages
+      description: Returns a list of pages
+      operationId: getPages
+      tags:
+        - Pages
+      security:
+        - AdminAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: filter
+          in: query
+          description: Filter query (e.g., status:'published')
+          required: false
+          schema:
+            type: string
+        - name: include
+          in: query
+          description: Related resources to include
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of pages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagesResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create a page
+      description: Creates a new page
+      operationId: createPage
+      tags:
+        - Pages
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageRequest'
+      responses:
+        '201':
+          description: Page created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pages/{id}:
+    get:
+      summary: Get page by ID
+      description: Returns a page by ID
+      operationId: getPageById
+      tags:
+        - Pages
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Page ID
+          required: true
+          schema:
+            type: string
+        - name: include
+          in: query
+          description: Related resources to include
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Page found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Page not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      summary: Update page
+      description: Updates an existing page
+      operationId: updatePage
+      tags:
+        - Pages
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Page ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageRequest'
+      responses:
+        '200':
+          description: Page updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Page not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete page
+      description: Deletes an existing page
+      operationId: deletePage
+      tags:
+        - Pages
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Page ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Page deleted successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Page not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /authors:
+    get:
+      summary: Get all authors
+      description: Returns a list of authors
+      operationId: getAuthors
+      tags:
+        - Authors
+      security:
+        - AdminAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: filter
+          in: query
+          description: Filter query
+          required: false
+          schema:
+            type: string
+        - name: include
+          in: query
+          description: Related resources to include
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of authors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /authors/{id}:
+    get:
+      summary: Get author by ID
+      description: Returns an author by ID
+      operationId: getAuthorById
+      tags:
+        - Authors
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Author ID
+          required: true
+          schema:
+            type: string
+        - name: include
+          in: query
+          description: Related resources to include
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Author found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Author not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tags:
+    get:
+      summary: Get all tags
+      description: Returns a list of tags
+      operationId: getTags
+      tags:
+        - Tags
+      security:
+        - AdminAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: filter
+          in: query
+          description: Filter query
+          required: false
+          schema:
+            type: string
+        - name: include
+          in: query
+          description: Related resources to include
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of tags
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create a tag
+      description: Creates a new tag
+      operationId: createTag
+      tags:
+        - Tags
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagRequest'
+      responses:
+        '201':
+          description: Tag created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tags/{id}:
+    get:
+      summary: Get tag by ID
+      description: Returns a tag by ID
+      operationId: getTagById
+      tags:
+        - Tags
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Tag ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tag found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      summary: Update tag
+      description: Updates an existing tag
+      operationId: updateTag
+      tags:
+        - Tags
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Tag ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagRequest'
+      responses:
+        '200':
+          description: Tag updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete tag
+      description: Deletes an existing tag
+      operationId: deleteTag
+      tags:
+        - Tags
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Tag ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Tag deleted successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

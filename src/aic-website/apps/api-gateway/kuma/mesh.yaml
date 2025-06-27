@@ -1,0 +1,43 @@
+apiVersion: kuma.io/v1alpha1
+kind: Mesh
+metadata:
+  name: aic-mesh
+spec:
+  metrics:
+    enabledBackend: prometheus-1
+    backends:
+      - name: prometheus-1
+        type: prometheus
+        conf:
+          port: 5670
+          path: /metrics
+          skipMTLS: true
+  logging:
+    backends:
+      - name: file-1
+        type: file
+        conf:
+          path: /var/log/kuma/access.log
+      - name: elasticsearch
+        type: elasticsearch
+        conf:
+          address: http://elasticsearch:9200
+          index: kuma-logs
+  tracing:
+    backends:
+      - name: zipkin-1
+        type: zipkin
+        conf:
+          url: http://zipkin:9411/api/v2/spans
+  mtls:
+    enabledBackend: ca-1
+    backends:
+      - name: ca-1
+        type: builtin
+        dpCert:
+          rotation:
+            expiration: 1d
+        conf:
+          caCert:
+            RSAbits: 2048
+            expiration: 10y

@@ -1,0 +1,165 @@
+---
+# Kibana Helm values for AIC Website
+# Based on the Elastic Helm chart
+
+# Kibana version
+imageTag: "8.8.1"
+
+# Replica count
+replicas: 2
+
+# Resource limits and requests
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "1"
+    memory: "2Gi"
+
+# Elasticsearch connection
+elasticsearchHosts: "https://aic-elasticsearch-master:9200"
+
+# Kibana configuration
+kibanaConfig:
+  kibana.yml: |
+    server.name: kibana
+    server.host: "0.0.0.0"
+    elasticsearch.hosts: ["https://aic-elasticsearch-master:9200"]
+    elasticsearch.ssl.verificationMode: certificate
+    elasticsearch.ssl.certificateAuthorities: ["/usr/share/kibana/config/certs/ca.crt"]
+    elasticsearch.username: kibana_system
+    elasticsearch.password: ${ELASTICSEARCH_PASSWORD}
+    xpack.monitoring.ui.container.elasticsearch.enabled: true
+    xpack.security.enabled: true
+    xpack.security.encryptionKey: ${ENCRYPTION_KEY}
+    xpack.reporting.encryptionKey: ${ENCRYPTION_KEY}
+    xpack.encryptedSavedObjects.encryptionKey: ${ENCRYPTION_KEY}
+    server.publicBaseUrl: https://kibana.example.com
+    logging.root.level: info
+
+# Extra environment variables
+extraEnvs:
+  - name: ELASTICSEARCH_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: kibana-credentials
+        key: password
+  - name: ENCRYPTION_KEY
+    valueFrom:
+      secretKeyRef:
+        name: kibana-credentials
+        key: encryptionKey
+  - name: NODE_OPTIONS
+    value: "--max-old-space-size=1800"
+
+# Security settings
+securityContext:
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 5601
+  nodePort: ""
+  labels: {}
+  annotations:
+    kuma.io/mesh: default
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+  externalTrafficPolicy: ""
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "kong"
+  pathtype: ImplementationSpecific
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/strip-path: "false"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    konghq.com/plugins: kibana-rate-limiting
+  path: /
+  hosts:
+    - kibana.example.com
+  tls:
+    - secretName: kibana-tls
+      hosts:
+        - kibana.example.com
+
+# Health check
+healthCheckPath: "/app/kibana"
+livenessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+readinessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+
+# Persistence configuration
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: "10Gi"
+  storageClass: "longhorn"
+
+# Pod annotations
+podAnnotations:
+  kuma.io/mesh: default
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "5601"
+  prometheus.io/path: "/metrics"
+
+# Elasticsearch SSL certificates
+extraVolumes:
+  - name: elasticsearch-certs
+    secret:
+      secretName: elasticsearch-security-certs
+extraVolumeMounts:
+  - name: elasticsearch-certs
+    mountPath: /usr/share/kibana/config/certs
+    readOnly: true
+
+# Pod affinity for high availability
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - kibana
+          topologyKey: kubernetes.io/hostname
+
+# Prometheus metrics
+prometheus:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      namespace: "observability"
+      labels:
+        release: prometheus
+      interval: 10s
+      scrapeTimeout: 10s
+
+# Lifecycle hooks
+lifecycle:
+  postStart:
+    exec:
+      command:
+        - bash
+        - -c
+        - |
+          #!/bin/bash
+          # Add any post-start initialization here

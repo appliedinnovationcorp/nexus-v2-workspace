@@ -1,0 +1,418 @@
+# HashiCorp Vault Helm Chart Values for AIC Website
+# This configuration deploys Vault in HA mode with Kubernetes integration
+
+global:
+  enabled: true
+  tlsDisable: false
+  
+  # External Vault configuration
+  externalVaultAddr: ""
+  
+  # OpenShift configuration
+  openshift: false
+  
+  # PSP configuration
+  psp:
+    enable: false
+    annotations: |
+      seccomp.security.alpha.kubernetes.io/allowedProfileNames: docker/default,runtime/default
+      apparmor.security.beta.kubernetes.io/allowedProfileNames: runtime/default
+      seccomp.security.alpha.kubernetes.io/defaultProfileName:  runtime/default
+      apparmor.security.beta.kubernetes.io/defaultProfileName:  runtime/default
+
+# Injector configuration for secret injection
+injector:
+  enabled: true
+  replicas: 2
+  port: 8080
+  leaderElector:
+    enabled: true
+  metrics:
+    enabled: true
+  externalVaultAddr: ""
+  image:
+    repository: "hashicorp/vault-k8s"
+    tag: "1.4.0"
+    pullPolicy: IfNotPresent
+  agentImage:
+    repository: "hashicorp/vault"
+    tag: "1.15.2"
+  agentDefaults:
+    cpuLimit: "500m"
+    cpuRequest: "250m"
+    memLimit: "128Mi"
+    memRequest: "64Mi"
+    template: "map"
+    templateConfig:
+      exitOnRetryFailure: true
+      staticSecretRenderInterval: ""
+  authPath: "auth/kubernetes"
+  logLevel: "info"
+  logFormat: "standard"
+  revokeOnShutdown: false
+  webhook:
+    failurePolicy: Ignore
+    matchPolicy: Exact
+    timeoutSeconds: 30
+    objectSelector: |
+      matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: NotIn
+        values:
+        - aspenmesh
+        - istio-proxy
+        - istio-init
+    annotations: {}
+    namespaceSelector: {}
+  failurePolicy: Ignore
+  namespaceSelector: {}
+  objectSelector: |
+    matchExpressions:
+    - key: app.kubernetes.io/name
+      operator: NotIn
+      values:
+      - aspenmesh
+      - istio-proxy
+      - istio-init
+  certs:
+    secretName: null
+    caBundle: ""
+    certName: tls.crt
+    keyName: tls.key
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  extraEnvironmentVars: {}
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ template "vault.name" . }}-agent-injector
+              app.kubernetes.io/instance: "{{ .Release.Name }}"
+              component: webhook
+          topologyKey: kubernetes.io/hostname
+  tolerations: []
+  nodeSelector: {}
+  priorityClassName: ""
+  annotations: {}
+  extraLabels: {}
+  hostNetwork: false
+  service:
+    annotations: {}
+  serviceAccount:
+    annotations: {}
+  podDisruptionBudget:
+    maxUnavailable: 1
+
+# Vault server configuration
+server:
+  enabled: true
+  enterpriseLicense:
+    secretName: ""
+    secretKey: "license"
+  image:
+    repository: "hashicorp/vault"
+    tag: "1.15.2"
+    pullPolicy: IfNotPresent
+  updateStrategyType: "OnDelete"
+  logLevel: "info"
+  logFormat: "json"
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 500m
+    limits:
+      memory: 2Gi
+      cpu: 2000m
+  ingress:
+    enabled: true
+    labels: {}
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    ingressClassName: "nginx"
+    pathType: Prefix
+    activeService: true
+    hosts:
+      - host: vault.aicorp.com
+        paths: []
+    tls:
+      - secretName: vault-tls-cert
+        hosts:
+          - vault.aicorp.com
+  route:
+    enabled: false
+    host: chart-example.local
+    tls:
+      termination: passthrough
+  authDelegator:
+    enabled: true
+  extraInitContainers: null
+  extraContainers: null
+  shareProcessNamespace: false
+  extraArgs: ""
+  readinessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+    failureThreshold: 2
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    successThreshold: 1
+    timeoutSeconds: 3
+  livenessProbe:
+    enabled: false
+    path: "/v1/sys/health?standbyok=true"
+    failureThreshold: 2
+    initialDelaySeconds: 60
+    periodSeconds: 5
+    successThreshold: 1
+    timeoutSeconds: 3
+  postStart: []
+  preStop: []
+  extraEnvironmentVars:
+    VAULT_CACERT: /vault/userconfig/vault-tls/ca.crt
+    VAULT_TLSCERT: /vault/userconfig/vault-tls/tls.crt
+    VAULT_TLSKEY: /vault/userconfig/vault-tls/tls.key
+  extraSecretEnvironmentVars:
+    - envName: AWS_ACCESS_KEY_ID
+      secretName: vault-aws-credentials
+      secretKey: access_key_id
+    - envName: AWS_SECRET_ACCESS_KEY
+      secretName: vault-aws-credentials
+      secretKey: secret_access_key
+  extraVolumes:
+    - type: secret
+      name: vault-tls
+      path: /vault/userconfig
+  extraVolumeMounts: []
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ template "vault.name" . }}
+              app.kubernetes.io/instance: "{{ .Release.Name }}"
+              component: server
+          topologyKey: kubernetes.io/hostname
+  tolerations: []
+  nodeSelector: {}
+  networkPolicy:
+    enabled: false
+    egress: []
+  priorityClassName: ""
+  extraLabels: {}
+  annotations: {}
+  service:
+    enabled: true
+    active:
+      enabled: true
+      annotations: {}
+    standby:
+      enabled: true
+      annotations: {}
+    instanceSelector:
+      enabled: true
+    publishNotReadyAddresses: true
+    externalTrafficPolicy: Cluster
+    port: 8200
+    targetPort: 8200
+    annotations: {}
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    mountPath: "/vault/data"
+    storageClass: "gp3"
+    accessMode: ReadWriteOnce
+    annotations: {}
+  auditStorage:
+    enabled: true
+    size: 10Gi
+    mountPath: "/vault/audit"
+    storageClass: "gp3"
+    accessMode: ReadWriteOnce
+    annotations: {}
+  dev:
+    enabled: false
+    devRootToken: "root"
+  standalone:
+    enabled: false
+    config: |
+      ui = true
+      listener "tcp" {
+        tls_disable = 1
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+      storage "file" {
+        path = "/vault/data"
+      }
+  ha:
+    enabled: true
+    replicas: 3
+    apiAddr: null
+    clusterAddr: null
+    raft:
+      enabled: false
+      setNodeId: false
+      config: |
+        ui = true
+        listener "tcp" {
+          tls_disable = 0
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file = "/vault/userconfig/vault-tls/tls.crt"
+          tls_key_file  = "/vault/userconfig/vault-tls/tls.key"
+          tls_client_ca_file = "/vault/userconfig/vault-tls/ca.crt"
+        }
+        storage "raft" {
+          path = "/vault/data"
+          retry_join {
+            leader_api_addr = "https://vault-0.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-tls/ca.crt"
+            leader_client_cert_file = "/vault/userconfig/vault-tls/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-tls/tls.key"
+          }
+          retry_join {
+            leader_api_addr = "https://vault-1.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-tls/ca.crt"
+            leader_client_cert_file = "/vault/userconfig/vault-tls/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-tls/tls.key"
+          }
+          retry_join {
+            leader_api_addr = "https://vault-2.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-tls/ca.crt"
+            leader_client_cert_file = "/vault/userconfig/vault-tls/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-tls/tls.key"
+          }
+        }
+        seal "awskms" {
+          region     = "us-west-2"
+          kms_key_id = "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012"
+        }
+        service_registration "kubernetes" {}
+    config: |
+      ui = true
+      listener "tcp" {
+        tls_disable = 0
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+        tls_cert_file = "/vault/userconfig/vault-tls/tls.crt"
+        tls_key_file  = "/vault/userconfig/vault-tls/tls.key"
+        tls_client_ca_file = "/vault/userconfig/vault-tls/ca.crt"
+      }
+      storage "consul" {
+        path = "vault"
+        address = "consul.vault-system.svc.cluster.local:8500"
+      }
+      seal "awskms" {
+        region     = "us-west-2"
+        kms_key_id = "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012"
+      }
+      service_registration "kubernetes" {}
+      log_level = "INFO"
+      log_format = "json"
+    disruptionBudget:
+      enabled: true
+      maxUnavailable: 1
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    extraLabels: {}
+    serviceDiscovery:
+      enabled: true
+
+# UI configuration
+ui:
+  enabled: true
+  publishNotReadyAddresses: true
+  activeVaultPodOnly: false
+  serviceType: "ClusterIP"
+  serviceNodePort: null
+  externalPort: 8200
+  targetPort: 8200
+  annotations: {}
+  externalIPs: []
+  loadBalancerSourceRanges: []
+  loadBalancerIP: ""
+
+# CSI Provider configuration
+csi:
+  enabled: true
+  image:
+    repository: "hashicorp/vault-csi-provider"
+    tag: "1.4.0"
+    pullPolicy: IfNotPresent
+  volumes:
+    - name: providervol
+      hostPath:
+        path: "/etc/kubernetes/secrets-store-csi-drivers"
+    - name: mountpoint-dir
+      hostPath:
+        path: "/var/lib/kubelet/pods"
+  volumeMounts:
+    - name: providervol
+      mountPath: "/etc/kubernetes/secrets-store-csi-drivers"
+    - name: mountpoint-dir
+      mountPath: "/var/lib/kubelet/pods"
+      mountPropagation: "Bidirectional"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 50m
+      memory: 128Mi
+  hmacSecretName: ""
+  daemonSet:
+    updateStrategy:
+      type: RollingUpdate
+      maxUnavailable: ""
+    annotations: {}
+    providersDir: "/etc/kubernetes/secrets-store-csi-drivers"
+    kubeletRootDir: "/var/lib/kubelet"
+    extraLabels: {}
+  pod:
+    annotations: {}
+    tolerations: []
+    extraLabels: {}
+  agent:
+    enabled: true
+    extraArgs: []
+    image:
+      repository: "hashicorp/vault"
+      tag: "1.15.2"
+    logFormat: "standard"
+    logLevel: "info"
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 250m
+      limits:
+        memory: 256Mi
+        cpu: 250m
+  priorityClassName: ""
+  serviceAccount:
+    annotations: {}
+    extraLabels: {}
+  debug: false
+  extraArgs: []
+
+# Server HA configuration
+serverTelemetry:
+  serviceMonitor:
+    enabled: false
+    selectors: {}
+    interval: 30s
+    scrapeTimeout: 10s
+  prometheusOperator:
+    enabled: false

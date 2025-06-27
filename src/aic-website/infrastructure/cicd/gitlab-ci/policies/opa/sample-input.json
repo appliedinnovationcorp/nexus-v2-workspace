@@ -1,0 +1,118 @@
+{
+  "pipeline": {
+    "id": 12345,
+    "source_branch": "main",
+    "jobs": [
+      {
+        "name": "lint",
+        "image": "registry.gitlab.com/gitlab-org/gitlab-runner-helper:latest",
+        "script": ["gitlab-ci-lint .gitlab-ci.yml"],
+        "tags": ["kubernetes"],
+        "resource_group": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        }
+      },
+      {
+        "name": "sast",
+        "image": "registry.gitlab.com/security-products/sast:latest",
+        "script": ["/analyzer run"],
+        "tags": ["kubernetes"],
+        "artifacts": {
+          "paths": ["gl-sast-report.json"],
+          "expire_in": "1 week"
+        }
+      },
+      {
+        "name": "dependency-scanning",
+        "image": "registry.gitlab.com/security-products/dependency-scanning:latest",
+        "script": ["/analyzer run"],
+        "tags": ["kubernetes"],
+        "artifacts": {
+          "paths": ["gl-dependency-scanning-report.json"],
+          "expire_in": "1 week"
+        }
+      },
+      {
+        "name": "secret-detection",
+        "image": "registry.gitlab.com/security-products/secret-detection:latest",
+        "script": ["/analyzer run"],
+        "tags": ["kubernetes"],
+        "artifacts": {
+          "paths": ["gl-secret-detection-report.json"],
+          "expire_in": "1 week"
+        }
+      },
+      {
+        "name": "unit-tests",
+        "image": "node:18-alpine",
+        "script": ["npm run test:unit -- --ci --coverage"],
+        "tags": ["kubernetes"],
+        "cache": {
+          "key": "${CI_COMMIT_REF_SLUG}",
+          "paths": ["node_modules/", ".yarn/", ".npm/"]
+        },
+        "artifacts": {
+          "paths": ["coverage/"],
+          "expire_in": "1 week"
+        }
+      },
+      {
+        "name": "deploy-dev",
+        "image": "bitnami/kubectl:latest",
+        "script": [
+          "cd src/aic-website/infrastructure/kubernetes",
+          "kubectl apply -k overlays/dev",
+          "kubectl rollout status deployment/frontend -n frontend",
+          "kubectl rollout status deployment/backend -n backend-services"
+        ],
+        "tags": ["kubernetes"],
+        "environment": {
+          "name": "development",
+          "url": "https://dev.example.com"
+        }
+      }
+    ],
+    "variables": [
+      {
+        "key": "CI_REGISTRY_USER",
+        "value": "gitlab-ci-token",
+        "masked": false,
+        "protected": false
+      },
+      {
+        "key": "CI_REGISTRY_PASSWORD",
+        "value": "token-value",
+        "masked": true,
+        "protected": false
+      },
+      {
+        "key": "KUBE_CONFIG",
+        "value": "base64-encoded-config",
+        "masked": true,
+        "protected": true
+      }
+    ]
+  },
+  "user": {
+    "id": 123,
+    "username": "john.doe",
+    "email": "john.doe@example.com",
+    "role": "maintainer"
+  },
+  "job": {
+    "name": "deploy-dev",
+    "image": "bitnami/kubectl:latest",
+    "script": [
+      "cd src/aic-website/infrastructure/kubernetes",
+      "kubectl apply -k overlays/dev",
+      "kubectl rollout status deployment/frontend -n frontend",
+      "kubectl rollout status deployment/backend -n backend-services"
+    ],
+    "tags": ["kubernetes"],
+    "environment": {
+      "name": "development",
+      "url": "https://dev.example.com"
+    }
+  }
+}

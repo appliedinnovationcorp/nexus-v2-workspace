@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-patterns
+  namespace: observability
+  labels:
+    app: logstash
+    part-of: aic-website
+data:
+  aic-patterns: |
+    # Custom patterns for AIC Website logs
+    AIC_TIMESTAMP %{YEAR}-%{MONTHNUM}-%{MONTHDAY}T%{HOUR}:%{MINUTE}:%{SECOND}.%{INT}Z
+    AIC_LOGLEVEL (DEBUG|INFO|NOTICE|WARNING|ERROR|CRITICAL|ALERT|EMERGENCY)
+    AIC_SERVICE ([a-zA-Z0-9_-]+)
+    AIC_REQUEST_ID ([a-zA-Z0-9-]+)
+    AIC_LOG %{AIC_TIMESTAMP:timestamp} %{AIC_LOGLEVEL:level} \[%{AIC_SERVICE:service}\] \[%{AIC_REQUEST_ID:request_id}\] %{GREEDYDATA:message}
+    
+    # API Gateway patterns
+    KONG_ACCESS %{IP:client_ip} - %{DATA:user} \[%{HTTPDATE:timestamp}\] "%{WORD:method} %{URIPATHPARAM:request} HTTP/%{NUMBER:http_version}" %{NUMBER:response_code} %{NUMBER:bytes} "%{DATA:referrer}" "%{DATA:agent}" %{NUMBER:response_time}
+    
+    # Backend service patterns
+    BACKEND_LOG %{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level}: %{GREEDYDATA:message}
+    
+    # AI service patterns
+    AI_SERVICE_LOG %{TIMESTAMP_ISO8601:timestamp} \[%{LOGLEVEL:level}\] \[%{DATA:model}\] %{GREEDYDATA:message}

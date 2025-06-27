@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway
+  namespace: api-gateway
+  labels:
+    app: api-gateway
+    part-of: aic-website
+    use-http01: "true"
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/strip-path: "false"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/issue-temporary-certificate: "true"
+    cert-manager.io/common-name: "api.example.com"
+    cert-manager.io/duration: "2160h" # 90 days
+    cert-manager.io/renew-before: "360h" # 15 days
+spec:
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kong-kong-proxy
+                port:
+                  number: 80
+  tls:
+    - secretName: api-gateway-tls
+      hosts:
+        - api.example.com

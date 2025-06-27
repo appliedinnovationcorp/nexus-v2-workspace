@@ -1,0 +1,64 @@
+apiVersion: kuma.io/v1alpha1
+kind: HealthCheck
+mesh: aic-mesh
+metadata:
+  name: backend-health
+spec:
+  sources:
+    - match:
+        kuma.io/service: kong
+  destinations:
+    - match:
+        kuma.io/service: backend
+  conf:
+    interval: 10s
+    timeout: 2s
+    unhealthyThreshold: 3
+    healthyThreshold: 1
+    http:
+      path: /health
+      expectedStatuses: [200]
+
+---
+apiVersion: kuma.io/v1alpha1
+kind: HealthCheck
+mesh: aic-mesh
+metadata:
+  name: ai-services-health
+spec:
+  sources:
+    - match:
+        kuma.io/service: kong
+  destinations:
+    - match:
+        kuma.io/service: ai-services
+  conf:
+    interval: 10s
+    timeout: 2s
+    unhealthyThreshold: 3
+    healthyThreshold: 1
+    http:
+      path: /health
+      expectedStatuses: [200]
+
+---
+apiVersion: kuma.io/v1alpha1
+kind: HealthCheck
+mesh: aic-mesh
+metadata:
+  name: ghost-cms-health
+spec:
+  sources:
+    - match:
+        kuma.io/service: kong
+  destinations:
+    - match:
+        kuma.io/service: ghost-cms
+  conf:
+    interval: 10s
+    timeout: 2s
+    unhealthyThreshold: 3
+    healthyThreshold: 1
+    http:
+      path: /ghost/api/content
+      expectedStatuses: [200]

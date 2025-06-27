@@ -1,4 +1,4 @@
-name: AIC Website CI/CD Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
@@ -7,59 +7,50 @@ on:
     branches: [main, develop]
 
 env:
-  NODE_VERSION: '18'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  HARBOR_REGISTRY: ${{ secrets.HARBOR_REGISTRY_URL }}
+  HARBOR_PROJECT: ${{ secrets.HARBOR_PROJECT }}
 
 jobs:
-  # Code Quality & Security
-  quality:
-    name: Code Quality & Security
+  # Code quality and validation
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          python-version: '3.11'
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          pip install flake8 black isort mypy
 
-      - name: Lint code
-        run: npm run lint
+      - name: Run code quality checks
+        run: |
+          echo "Running code quality checks..."
+          find services -name "*.py" -exec flake8 {} \;
+          find services -name "*.py" -exec black --check {} \;
+          find services -name "*.py" -exec isort --check-only {} \;
 
-      - name: Type check
-        run: npm run type-check
+      - name: Validate Docker Compose
+        run: |
+          docker-compose -f docker-compose.yml config
+          docker-compose -f docker-compose.override.yml config
 
-      - name: Format check
-        run: npm run format:check
-
-      - name: Security audit
-        run: npm audit --audit-level=high
-
-      - name: Dependency vulnerability scan
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high
-
-  # Unit & Integration Tests
-  test:
-    name: Test Suite
+  # Test jobs
+  test-auth-service:
     runs-on: ubuntu-latest
-    needs: quality
-    
     services:
       postgres:
-        image: postgres:15
+        image: postgres:13
         env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
+          POSTGRES_DB: test_auth_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -67,17 +58,13 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-
-      mongodb:
-        image: mongo:7
-        env:
-          MONGO_INITDB_ROOT_USERNAME: root
-          MONGO_INITDB_ROOT_PASSWORD: password
-        ports:
-          - 27017:27017
-
       redis:
         image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
         ports:
           - 6379:6379
 
@@ -85,46 +72,188 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          python-version: '3.11'
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          cd services/auth-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx pytest-cov
 
-      - name: Run unit tests
-        run: npm run test
+      - name: Run tests
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-          MONGODB_URL: mongodb://root:password@localhost:27017/test_db?authSource=admin
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_auth_db
           REDIS_URL: redis://localhost:6379
+        run: |
+          cd services/auth-service
+          pytest tests/ -v --cov=. --cov-report=xml
 
-      - name: Run integration tests
-        run: npm run test:integration
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-          MONGODB_URL: mongodb://root:password@localhost:27017/test_db?authSource=admin
-
-      - name: Upload coverage reports
+      - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          file: services/auth-service/coverage.xml
+          flags: auth-service
 
-  # Build & Container Security
-  build:
-    name: Build & Security Scan
+  test-user-service:
     runs-on: ubuntu-latest
-    needs: [quality, test]
-    outputs:
-      image-digest: ${{ steps.build.outputs.digest }}
-    
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_DB: test_user_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Docker Buildx
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd services/user-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx pytest-cov
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_user_db
+          REDIS_URL: redis://localhost:6379
+        run: |
+          cd services/user-service
+          pytest tests/ -v --cov=. --cov-report=xml
+
+  test-content-service:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_DB: test_content_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd services/content-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx pytest-cov moto
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_content_db
+          REDIS_URL: redis://localhost:6379
+        run: |
+          cd services/content-service
+          pytest tests/ -v --cov=. --cov-report=xml
+
+  test-notification-service:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_DB: test_notification_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd services/notification-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx pytest-cov moto
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_notification_db
+          REDIS_URL: redis://localhost:6379
+        run: |
+          cd services/notification-service
+          pytest tests/ -v --cov=. --cov-report=xml
+
+  # Build and push Docker images
+  build-auth-service:
+    needs: [validate, test-auth-service]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Container Registry
@@ -138,235 +267,317 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/auth-service
 
       - name: Build and push Docker image
-        id: build
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./apps/web-main/Dockerfile
+          context: services/auth-service
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
 
-      - name: Container security scan
+  build-user-service:
+    needs: [validate, test-user-service]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/user-service
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/user-service
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-content-service:
+    needs: [validate, test-content-service]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/content-service
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/content-service
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-notification-service:
+    needs: [validate, test-notification-service]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/notification-service
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/notification-service
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-web-main:
+    needs: [validate]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: apps/web-main/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd apps/web-main
+          npm ci
+
+      - name: Build application
+        run: |
+          cd apps/web-main
+          npm run build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/web-main
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/web-main
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Security scanning
+  security-scan:
+    needs: [build-auth-service, build-user-service, build-content-service, build-notification-service]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      matrix:
+        service: [auth-service, user-service, content-service, notification-service]
+    steps:
+      - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:main
           format: 'sarif'
           output: 'trivy-results.sarif'
 
-      - name: Upload Trivy scan results
+      - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v2
         with:
           sarif_file: 'trivy-results.sarif'
 
-  # Infrastructure Validation
-  infrastructure:
-    name: Infrastructure Validation
+  # Deploy to development
+  deploy-dev:
+    needs: [build-auth-service, build-user-service, build-content-service, build-notification-service, build-web-main]
     runs-on: ubuntu-latest
-    needs: quality
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.0
-
-      - name: Terraform Format Check
-        run: terraform fmt -check -recursive
-        working-directory: ./infra/terraform
-
-      - name: Terraform Init
-        run: terraform init
-        working-directory: ./infra/terraform
-
-      - name: Terraform Validate
-        run: terraform validate
-        working-directory: ./infra/terraform
-
-      - name: Terraform Plan
-        run: terraform plan -no-color
-        working-directory: ./infra/terraform
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
-      - name: Infrastructure security scan
-        uses: aquasecurity/tfsec-action@v1.0.0
-        with:
-          working_directory: ./infra/terraform
-
-  # Performance Testing
-  performance:
-    name: Performance Testing
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'pull_request'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build application
-        run: npm run build
-
-      - name: Start application
-        run: npm start &
-        env:
-          NODE_ENV: production
-
-      - name: Wait for application
-        run: npx wait-on http://localhost:3000
-
-      - name: Run Lighthouse CI
-        run: npx lhci autorun
-        env:
-          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
-
-      - name: Run load tests
-        run: npx artillery run tests/load/basic-load-test.yml
-
-  # Staging Deployment
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: [build, infrastructure, performance]
     if: github.ref == 'refs/heads/develop'
-    environment: staging
-    
+    environment:
+      name: development
+      url: https://dev.aic-website.com
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          method: kubeconfig
+          kubeconfig: ${{ secrets.DEV_KUBECONFIG }}
 
-      - name: Deploy to ECS
+      - name: Deploy to development
         run: |
-          aws ecs update-service \
-            --cluster aic-website-staging-cluster \
-            --service aic-website-staging-service \
-            --force-new-deployment
+          kubectl set image deployment/auth-service auth-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/auth-service:develop -n aic-website-dev
+          kubectl set image deployment/user-service user-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/user-service:develop -n aic-website-dev
+          kubectl set image deployment/content-service content-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/content-service:develop -n aic-website-dev
+          kubectl set image deployment/notification-service notification-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/notification-service:develop -n aic-website-dev
+          kubectl set image deployment/web-main web-main=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/web-main:develop -n aic-website-dev
 
-      - name: Wait for deployment
+      - name: Wait for rollout
         run: |
-          aws ecs wait services-stable \
-            --cluster aic-website-staging-cluster \
-            --services aic-website-staging-service
+          kubectl rollout status deployment/auth-service -n aic-website-dev --timeout=300s
+          kubectl rollout status deployment/user-service -n aic-website-dev --timeout=300s
+          kubectl rollout status deployment/content-service -n aic-website-dev --timeout=300s
+          kubectl rollout status deployment/notification-service -n aic-website-dev --timeout=300s
+          kubectl rollout status deployment/web-main -n aic-website-dev --timeout=300s
 
-      - name: Run smoke tests
-        run: npm run test:smoke
-        env:
-          TEST_URL: https://staging.aicorp.com
-
-  # Production Deployment
-  deploy-production:
-    name: Deploy to Production
+  # Deploy to staging
+  deploy-staging:
+    needs: [security-scan]
     runs-on: ubuntu-latest
-    needs: [build, infrastructure]
     if: github.ref == 'refs/heads/main'
-    environment: production
-    
+    environment:
+      name: staging
+      url: https://staging.aic-website.com
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          method: kubeconfig
+          kubeconfig: ${{ secrets.STAGING_KUBECONFIG }}
 
-      - name: Blue-Green Deployment
+      - name: Deploy to staging
         run: |
-          # Get current task definition
-          TASK_DEFINITION=$(aws ecs describe-services \
-            --cluster aic-website-prod-cluster \
-            --services aic-website-prod-service \
-            --query 'services[0].taskDefinition' \
-            --output text)
-          
-          # Update task definition with new image
-          NEW_TASK_DEFINITION=$(aws ecs describe-task-definition \
-            --task-definition $TASK_DEFINITION \
-            --query 'taskDefinition' \
-            --output json | \
-            jq --arg IMAGE "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" \
-            '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
-          
-          # Register new task definition
-          NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEFINITION | \
-            aws ecs register-task-definition \
-            --cli-input-json file:///dev/stdin \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-          
-          # Update service
-          aws ecs update-service \
-            --cluster aic-website-prod-cluster \
-            --service aic-website-prod-service \
-            --task-definition $NEW_TASK_DEF_ARN
+          kubectl set image deployment/auth-service auth-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/auth-service:main -n aic-website-staging
+          kubectl set image deployment/user-service user-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/user-service:main -n aic-website-staging
+          kubectl set image deployment/content-service content-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/content-service:main -n aic-website-staging
+          kubectl set image deployment/notification-service notification-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/notification-service:main -n aic-website-staging
+          kubectl set image deployment/web-main web-main=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/web-main:main -n aic-website-staging
 
-      - name: Wait for deployment
+      - name: Wait for rollout
         run: |
-          aws ecs wait services-stable \
-            --cluster aic-website-prod-cluster \
-            --services aic-website-prod-service
+          kubectl rollout status deployment/auth-service -n aic-website-staging --timeout=300s
+          kubectl rollout status deployment/user-service -n aic-website-staging --timeout=300s
+          kubectl rollout status deployment/content-service -n aic-website-staging --timeout=300s
+          kubectl rollout status deployment/notification-service -n aic-website-staging --timeout=300s
+          kubectl rollout status deployment/web-main -n aic-website-staging --timeout=300s
 
-      - name: Run production smoke tests
-        run: npm run test:smoke
-        env:
-          TEST_URL: https://aicorp.com
-
-      - name: Invalidate CloudFront cache
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/*"
-
-  # Post-deployment monitoring
-  monitor:
-    name: Post-deployment Monitoring
+  # Deploy to production
+  deploy-prod:
+    needs: [deploy-staging]
     runs-on: ubuntu-latest
-    needs: [deploy-production]
     if: github.ref == 'refs/heads/main'
-    
+    environment:
+      name: production
+      url: https://aic-website.com
     steps:
-      - name: Setup monitoring alerts
-        run: |
-          # Setup CloudWatch alarms, Datadog monitors, etc.
-          echo "Setting up post-deployment monitoring..."
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Notify team
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.PROD_KUBECONFIG }}
+
+      - name: Deploy to production
+        run: |
+          kubectl set image deployment/auth-service auth-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/auth-service:main -n aic-website-prod
+          kubectl set image deployment/user-service user-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/user-service:main -n aic-website-prod
+          kubectl set image deployment/content-service content-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/content-service:main -n aic-website-prod
+          kubectl set image deployment/notification-service notification-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/notification-service:main -n aic-website-prod
+          kubectl set image deployment/web-main web-main=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/web-main:main -n aic-website-prod
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/auth-service -n aic-website-prod --timeout=300s
+          kubectl rollout status deployment/user-service -n aic-website-prod --timeout=300s
+          kubectl rollout status deployment/content-service -n aic-website-prod --timeout=300s
+          kubectl rollout status deployment/notification-service -n aic-website-prod --timeout=300s
+          kubectl rollout status deployment/web-main -n aic-website-prod --timeout=300s
+
+  # Notifications
+  notify-success:
+    needs: [deploy-prod]
+    runs-on: ubuntu-latest
+    if: success() && github.ref == 'refs/heads/main'
+    steps:
+      - name: Notify Slack
         uses: 8398a7/action-slack@v3
         with:
-          status: ${{ job.status }}
-          channel: '#deployments'
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-        if: always()
+          status: success
+          text: '✅ Production deployment successful for AIC Website'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  notify-failure:
+    needs: [deploy-prod]
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          text: '❌ Pipeline failed for AIC Website'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

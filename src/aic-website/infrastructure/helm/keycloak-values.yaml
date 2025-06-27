@@ -1,0 +1,625 @@
+# Keycloak Helm Values Configuration
+# Based on Bitnami Keycloak Helm Chart
+
+## Global parameters
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: "longhorn"
+
+## Keycloak image configuration
+image:
+  registry: docker.io
+  repository: bitnami/keycloak
+  tag: 21.1.1
+  pullPolicy: IfNotPresent
+  debug: false
+
+## Keycloak Configuration parameters
+auth:
+  adminUser: admin
+  existingSecret: "keycloak-admin-credentials"
+  passwordSecretKey: "admin-password"
+
+## Keycloak deployment parameters
+replicaCount: 3
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+## Resource allocation
+resources:
+  limits:
+    cpu: "2"
+    memory: "2Gi"
+  requests:
+    cpu: "1"
+    memory: "1Gi"
+
+## Liveness and readiness probes
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 300
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+## Service parameters
+service:
+  type: ClusterIP
+  port: 80
+  httpsPort: 443
+  nodePorts:
+    http: ""
+    https: ""
+  clusterIP: ""
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+  externalTrafficPolicy: Cluster
+  annotations: {}
+
+## Ingress parameters
+ingress:
+  enabled: true
+  ingressClassName: "kong"
+  pathType: Prefix
+  apiVersion: ""
+  hostname: auth.example.com
+  path: /
+  annotations:
+    konghq.com/strip-path: "false"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    konghq.com/protocols: "https"
+    konghq.com/https-redirect-status-code: "301"
+  tls: true
+  extraTls:
+    - hosts:
+        - auth.example.com
+      secretName: keycloak-tls
+
+## Database parameters
+postgresql:
+  enabled: true
+  auth:
+    username: bn_keycloak
+    database: bitnami_keycloak
+    existingSecret: "keycloak-database-credentials"
+    secretKeys:
+      adminPasswordKey: admin-password
+      userPasswordKey: user-password
+      replicationPasswordKey: replication-password
+  architecture: replication
+  primary:
+    persistence:
+      enabled: true
+      storageClass: "longhorn"
+      size: 20Gi
+  readReplicas:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      storageClass: "longhorn"
+      size: 20Gi
+
+## Keycloak cache configuration
+cache:
+  enabled: true
+  stackName: "keycloak-stack"
+  stackType: "kubernetes"
+  stackFile: ""
+  replicas: 3
+
+## Metrics parameters
+metrics:
+  enabled: true
+  service:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+  serviceMonitor:
+    enabled: true
+    namespace: "observability"
+    interval: 30s
+    scrapeTimeout: 10s
+    labels:
+      release: prometheus
+
+## Network policies
+networkPolicy:
+  enabled: true
+  allowExternal: true
+  extraIngress: []
+  extraEgress: []
+
+## Keycloak configuration
+keycloakConfigCli:
+  enabled: true
+  command:
+    - java
+    - -jar
+    - /opt/bitnami/keycloak-config-cli/keycloak-config-cli.jar
+  configuration:
+    # Realm configuration
+    realms:
+      - name: aic-website
+        enabled: true
+        displayName: "AIC Website"
+        displayNameHtml: "<div class=\"kc-logo-text\"><span>AIC Website</span></div>"
+        loginTheme: aic-theme
+        accountTheme: aic-theme
+        adminTheme: aic-theme
+        emailTheme: aic-theme
+        bruteForceProtected: true
+        permanentLockout: false
+        failureFactor: 5
+        maxFailureWaitSeconds: 900
+        minimumQuickLoginWaitSeconds: 60
+        waitIncrementSeconds: 60
+        quickLoginCheckMilliSeconds: 1000
+        maxDeltaTimeSeconds: 43200
+        accessTokenLifespan: 300
+        accessTokenLifespanForImplicitFlow: 900
+        ssoSessionIdleTimeout: 1800
+        ssoSessionMaxLifespan: 36000
+        offlineSessionIdleTimeout: 2592000
+        accessCodeLifespan: 60
+        accessCodeLifespanUserAction: 300
+        accessCodeLifespanLogin: 1800
+        sslRequired: "external"
+        registrationAllowed: false
+        registrationEmailAsUsername: false
+        rememberMe: true
+        verifyEmail: true
+        loginWithEmailAllowed: true
+        duplicateEmailsAllowed: false
+        resetPasswordAllowed: true
+        editUsernameAllowed: false
+        defaultSignatureAlgorithm: "RS256"
+        revokeRefreshToken: true
+        refreshTokenMaxReuse: 0
+        ssoSessionIdleTimeoutRememberMe: 172800
+        ssoSessionMaxLifespanRememberMe: 172800
+        
+        # Realm roles
+        roles:
+          realm:
+            - name: user
+              description: "Regular user role"
+            - name: admin
+              description: "Administrator role"
+            - name: editor
+              description: "Content editor role"
+            - name: api-user
+              description: "API access role"
+        
+        # Client scopes
+        clientScopes:
+          - name: profile
+            description: "User profile information"
+            protocol: "openid-connect"
+            attributes:
+              include.in.token.scope: "true"
+              display.on.consent.screen: "true"
+            protocolMappers:
+              - name: full name
+                protocol: "openid-connect"
+                protocolMapper: "oidc-full-name-mapper"
+                config:
+                  id.token.claim: "true"
+                  access.token.claim: "true"
+              - name: email
+                protocol: "openid-connect"
+                protocolMapper: "oidc-usermodel-property-mapper"
+                config:
+                  userinfo.token.claim: "true"
+                  user.attribute: "email"
+                  id.token.claim: "true"
+                  access.token.claim: "true"
+                  claim.name: "email"
+                  jsonType.label: "String"
+          - name: api-access
+            description: "API access scope"
+            protocol: "openid-connect"
+            attributes:
+              include.in.token.scope: "true"
+              display.on.consent.screen: "true"
+            protocolMappers:
+              - name: roles
+                protocol: "openid-connect"
+                protocolMapper: "oidc-usermodel-realm-role-mapper"
+                config:
+                  multivalued: "true"
+                  userinfo.token.claim: "true"
+                  id.token.claim: "true"
+                  access.token.claim: "true"
+                  claim.name: "roles"
+                  jsonType.label: "String"
+        
+        # Clients configuration
+        clients:
+          # Frontend web application
+          - clientId: aic-website-frontend
+            name: "AIC Website Frontend"
+            description: "Frontend web application"
+            enabled: true
+            clientAuthenticatorType: "client-secret"
+            secret: "to-be-replaced-by-secret"
+            redirectUris:
+              - "https://www.example.com/*"
+              - "https://staging.example.com/*"
+              - "https://dev.example.com/*"
+            webOrigins:
+              - "https://www.example.com"
+              - "https://staging.example.com"
+              - "https://dev.example.com"
+            publicClient: false
+            protocol: "openid-connect"
+            standardFlowEnabled: true
+            implicitFlowEnabled: false
+            directAccessGrantsEnabled: true
+            serviceAccountsEnabled: false
+            authorizationServicesEnabled: false
+            fullScopeAllowed: false
+            defaultClientScopes:
+              - "profile"
+              - "email"
+            optionalClientScopes:
+              - "address"
+              - "phone"
+            attributes:
+              pkce.code.challenge.method: "S256"
+              access.token.lifespan: "1800"
+              backchannel.logout.session.required: "true"
+              backchannel.logout.revoke.offline.tokens: "false"
+          
+          # Backend API
+          - clientId: aic-website-backend-api
+            name: "AIC Website Backend API"
+            description: "Backend API services"
+            enabled: true
+            clientAuthenticatorType: "client-secret"
+            secret: "to-be-replaced-by-secret"
+            redirectUris:
+              - "https://api.example.com/*"
+            webOrigins:
+              - "https://api.example.com"
+            publicClient: false
+            protocol: "openid-connect"
+            standardFlowEnabled: false
+            implicitFlowEnabled: false
+            directAccessGrantsEnabled: false
+            serviceAccountsEnabled: true
+            authorizationServicesEnabled: true
+            fullScopeAllowed: false
+            defaultClientScopes:
+              - "api-access"
+            attributes:
+              access.token.lifespan: "3600"
+            authorizationSettings:
+              allowRemoteResourceManagement: true
+              policyEnforcementMode: "ENFORCING"
+              resources:
+                - name: "user-resource"
+                  displayName: "User Resources"
+                  uris:
+                    - "/users/*"
+                  scopes:
+                    - name: "read"
+                    - name: "write"
+                    - name: "delete"
+                - name: "content-resource"
+                  displayName: "Content Resources"
+                  uris:
+                    - "/content/*"
+                  scopes:
+                    - name: "read"
+                    - name: "write"
+                    - name: "delete"
+              policies:
+                - name: "admin-policy"
+                  description: "Admin Policy"
+                  type: "role"
+                  logic: "POSITIVE"
+                  decisionStrategy: "UNANIMOUS"
+                  config:
+                    roles: "[{\"id\":\"admin\",\"required\":true}]"
+                - name: "user-policy"
+                  description: "User Policy"
+                  type: "role"
+                  logic: "POSITIVE"
+                  decisionStrategy: "UNANIMOUS"
+                  config:
+                    roles: "[{\"id\":\"user\",\"required\":true}]"
+                - name: "editor-policy"
+                  description: "Editor Policy"
+                  type: "role"
+                  logic: "POSITIVE"
+                  decisionStrategy: "UNANIMOUS"
+                  config:
+                    roles: "[{\"id\":\"editor\",\"required\":true}]"
+              scopes:
+                - name: "read"
+                  displayName: "Read access"
+                - name: "write"
+                  displayName: "Write access"
+                - name: "delete"
+                  displayName: "Delete access"
+              permissions:
+                - name: "user-read-permission"
+                  description: "User read permission"
+                  type: "resource"
+                  logic: "POSITIVE"
+                  decisionStrategy: "UNANIMOUS"
+                  resources: ["user-resource"]
+                  scopes: ["read"]
+                  policies: ["user-policy"]
+                - name: "user-write-permission"
+                  description: "User write permission"
+                  type: "resource"
+                  logic: "POSITIVE"
+                  decisionStrategy: "UNANIMOUS"
+                  resources: ["user-resource"]
+                  scopes: ["write"]
+                  policies: ["admin-policy"]
+                - name: "content-read-permission"
+                  description: "Content read permission"
+                  type: "resource"
+                  logic: "POSITIVE"
+                  decisionStrategy: "UNANIMOUS"
+                  resources: ["content-resource"]
+                  scopes: ["read"]
+                  policies: ["user-policy"]
+                - name: "content-write-permission"
+                  description: "Content write permission"
+                  type: "resource"
+                  logic: "POSITIVE"
+                  decisionStrategy: "UNANIMOUS"
+                  resources: ["content-resource"]
+                  scopes: ["write"]
+                  policies: ["editor-policy", "admin-policy"]
+          
+          # AI Services API
+          - clientId: aic-website-ai-services
+            name: "AIC Website AI Services"
+            description: "AI Services API"
+            enabled: true
+            clientAuthenticatorType: "client-secret"
+            secret: "to-be-replaced-by-secret"
+            redirectUris:
+              - "https://ai-api.example.com/*"
+            webOrigins:
+              - "https://ai-api.example.com"
+            publicClient: false
+            protocol: "openid-connect"
+            standardFlowEnabled: false
+            implicitFlowEnabled: false
+            directAccessGrantsEnabled: false
+            serviceAccountsEnabled: true
+            authorizationServicesEnabled: false
+            fullScopeAllowed: false
+            defaultClientScopes:
+              - "api-access"
+            attributes:
+              access.token.lifespan: "3600"
+          
+          # Kong API Gateway
+          - clientId: kong-api-gateway
+            name: "Kong API Gateway"
+            description: "Kong API Gateway for service authentication"
+            enabled: true
+            clientAuthenticatorType: "client-secret"
+            secret: "to-be-replaced-by-secret"
+            redirectUris:
+              - "https://api.example.com/*"
+            webOrigins:
+              - "https://api.example.com"
+            publicClient: false
+            protocol: "openid-connect"
+            standardFlowEnabled: true
+            implicitFlowEnabled: false
+            directAccessGrantsEnabled: false
+            serviceAccountsEnabled: true
+            authorizationServicesEnabled: false
+            fullScopeAllowed: false
+            defaultClientScopes:
+              - "api-access"
+            attributes:
+              access.token.lifespan: "3600"
+        
+        # User federation
+        components:
+          org.keycloak.storage.UserStorageProvider:
+            - name: "ldap-provider"
+              providerId: "ldap"
+              config:
+                enabled: ["true"]
+                priority: ["1"]
+                editMode: ["READ_ONLY"]
+                syncRegistrations: ["false"]
+                vendor: ["other"]
+                usernameLDAPAttribute: ["uid"]
+                rdnLDAPAttribute: ["uid"]
+                uuidLDAPAttribute: ["entryUUID"]
+                userObjectClasses: ["inetOrgPerson, organizationalPerson"]
+                connectionUrl: ["ldap://ldap-service.security:389"]
+                usersDn: ["ou=users,dc=example,dc=com"]
+                authType: ["simple"]
+                bindDn: ["cn=admin,dc=example,dc=com"]
+                bindCredential: ["to-be-replaced-by-secret"]
+                searchScope: ["1"]
+                useTruststoreSpi: ["ldapsOnly"]
+                connectionPooling: ["true"]
+                pagination: ["true"]
+                batchSizeForSync: ["1000"]
+                fullSyncPeriod: ["86400"]
+                changedSyncPeriod: ["600"]
+                cachePolicy: ["DEFAULT"]
+                
+        # Authentication flows
+        authenticationFlows:
+          - alias: "browser"
+            description: "browser based authentication"
+            providerId: "basic-flow"
+            topLevel: true
+            builtIn: true
+            authenticationExecutions:
+              - authenticator: "auth-cookie"
+                requirement: "ALTERNATIVE"
+                priority: 10
+                autheticatorFlow: false
+              - authenticator: "auth-spnego"
+                requirement: "DISABLED"
+                priority: 20
+                autheticatorFlow: false
+              - authenticator: "identity-provider-redirector"
+                requirement: "ALTERNATIVE"
+                priority: 25
+                autheticatorFlow: false
+              - requirement: "ALTERNATIVE"
+                priority: 30
+                autheticatorFlow: true
+                flowAlias: "forms"
+          - alias: "forms"
+            description: "Username, password, otp and other auth forms."
+            providerId: "basic-flow"
+            topLevel: false
+            builtIn: true
+            authenticationExecutions:
+              - authenticator: "auth-username-password-form"
+                requirement: "REQUIRED"
+                priority: 10
+                autheticatorFlow: false
+              - authenticator: "auth-otp-form"
+                requirement: "OPTIONAL"
+                priority: 20
+                autheticatorFlow: false
+        
+        # Required actions
+        requiredActions:
+          - alias: "CONFIGURE_TOTP"
+            name: "Configure OTP"
+            providerId: "CONFIGURE_TOTP"
+            enabled: true
+            defaultAction: false
+            priority: 10
+          - alias: "UPDATE_PASSWORD"
+            name: "Update Password"
+            providerId: "UPDATE_PASSWORD"
+            enabled: true
+            defaultAction: false
+            priority: 20
+          - alias: "UPDATE_PROFILE"
+            name: "Update Profile"
+            providerId: "UPDATE_PROFILE"
+            enabled: true
+            defaultAction: false
+            priority: 30
+          - alias: "VERIFY_EMAIL"
+            name: "Verify Email"
+            providerId: "VERIFY_EMAIL"
+            enabled: true
+            defaultAction: false
+            priority: 40
+        
+        # SMTP server configuration
+        smtpServer:
+          host: "smtp.example.com"
+          port: "587"
+          fromDisplayName: "AIC Website"
+          from: "no-reply@example.com"
+          replyToDisplayName: "AIC Support"
+          replyTo: "support@example.com"
+          ssl: "false"
+          starttls: "true"
+          auth: "true"
+          user: "smtp-user"
+          password: "to-be-replaced-by-secret"
+
+## Extra environment variables
+extraEnvVars:
+  - name: KEYCLOAK_EXTRA_ARGS
+    value: "--spi-login-protocol-openid-connect-legacy-logout-redirect-uri=true"
+  - name: KEYCLOAK_ENABLE_STATISTICS
+    value: "true"
+  - name: KEYCLOAK_PRODUCTION
+    value: "true"
+  - name: PROXY_ADDRESS_FORWARDING
+    value: "true"
+  - name: KEYCLOAK_LOG_LEVEL
+    value: "INFO"
+  - name: KEYCLOAK_HTTP_RELATIVE_PATH
+    value: "/"
+
+## Extra volumes and mounts for custom themes
+extraVolumes:
+  - name: aic-theme
+    configMap:
+      name: keycloak-aic-theme
+extraVolumeMounts:
+  - name: aic-theme
+    mountPath: /opt/bitnami/keycloak/themes/aic-theme
+
+## Pod affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - keycloak
+          topologyKey: kubernetes.io/hostname
+
+## Node tolerations
+tolerations: []
+
+## Pod security context
+podSecurityContext:
+  enabled: true
+  fsGroup: 1001
+
+## Container security context
+containerSecurityContext:
+  enabled: true
+  runAsUser: 1001
+  runAsNonRoot: true
+
+## Init containers
+initContainers: []
+
+## Sidecars
+sidecars: []
+
+## Persistence configuration
+persistence:
+  enabled: true
+  mountPath: /bitnami/keycloak
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+
+## Service account
+serviceAccount:
+  create: true
+  name: "keycloak"
+  annotations: {}
+
+## Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+  kuma.io/mesh: default

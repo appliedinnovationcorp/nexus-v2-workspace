@@ -1,0 +1,201 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-performance-test
+  namespace: performance
+  labels:
+    app: k6-performance-test
+    part-of: aic-website
+spec:
+  ttlSecondsAfterFinished: 86400  # 24 hours
+  template:
+    spec:
+      containers:
+      - name: k6
+        image: grafana/k6:latest
+        args:
+        - run
+        - /scripts/load-test.js
+        - --out
+        - json=/results/result.json
+        - --summary-export=/results/summary.json
+        env:
+        - name: BASE_URL
+          value: "http://api-gateway.api-gateway.svc.cluster.local/v1"
+        - name: K6_STATSD_ENABLE_TAGS
+          value: "true"
+        - name: K6_STATSD_ADDR
+          value: "prometheus-statsd-exporter.observability.svc.cluster.local:9125"
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+        - name: results
+          mountPath: /results
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 1Gi
+      volumes:
+      - name: scripts
+        configMap:
+          name: k6-test-scripts
+      - name: results
+        persistentVolumeClaim:
+          claimName: k6-results-pvc
+      restartPolicy: Never
+  backoffLimit: 1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-test-scripts
+  namespace: performance
+data:
+  load-test.js: |
+    import http from 'k6/http';
+    import { check, sleep, group } from 'k6';
+    import { Counter, Rate, Trend } from 'k6/metrics';
+    
+    // Custom metrics
+    const successfulLogins = new Counter('successful_logins');
+    const failedLogins = new Counter('failed_logins');
+    const successRate = new Rate('success_rate');
+    const apiLatency = new Trend('api_latency');
+    
+    // Configuration
+    export const options = {
+      scenarios: {
+        browsing: {
+          executor: 'ramping-vus',
+          startVUs: 0,
+          stages: [
+            { duration: '2m', target: 100 },
+            { duration: '5m', target: 100 },
+            { duration: '2m', target: 0 },
+          ],
+          gracefulRampDown: '30s',
+        },
+      },
+      thresholds: {
+        http_req_duration: ['p(95)<500'],
+        'http_req_duration{endpoint:login}': ['p(95)<300'],
+        'http_req_duration{endpoint:content}': ['p(95)<200'],
+        'successful_logins': ['count>100'],
+        'success_rate': ['rate>0.95'],
+      },
+    };
+    
+    // Shared data
+    const BASE_URL = __ENV.BASE_URL || 'http://api-gateway/v1';
+    
+    // Main test function
+    export default function() {
+      group('Health Check', () => {
+        const healthRes = http.get(`${BASE_URL}/health`);
+        
+        check(healthRes, {
+          'health status is 200': (r) => r.status === 200,
+          'health is healthy': (r) => JSON.parse(r.body).status === 'healthy',
+        });
+      });
+      
+      sleep(1);
+      
+      group('Content API', () => {
+        const contentRes = http.get(`${BASE_URL}/content?limit=10`, {
+          tags: { endpoint: 'content' }
+        });
+        
+        check(contentRes, {
+          'content status is 200': (r) => r.status === 200,
+        });
+      });
+      
+      sleep(1);
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: k6-results-pvc
+  namespace: performance
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: longhorn
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-statsd-exporter
+  namespace: observability
+  labels:
+    app: prometheus-statsd-exporter
+spec:
+  ports:
+  - name: statsd-udp
+    port: 9125
+    protocol: UDP
+    targetPort: 9125
+  - name: metrics
+    port: 9102
+    protocol: TCP
+    targetPort: 9102
+  selector:
+    app: prometheus-statsd-exporter
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-statsd-exporter
+  namespace: observability
+  labels:
+    app: prometheus-statsd-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-statsd-exporter
+  template:
+    metadata:
+      labels:
+        app: prometheus-statsd-exporter
+    spec:
+      containers:
+      - name: prometheus-statsd-exporter
+        image: prom/statsd-exporter:latest
+        ports:
+        - containerPort: 9125
+          protocol: UDP
+          name: statsd-udp
+        - containerPort: 9102
+          protocol: TCP
+          name: metrics
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: statsd-exporter
+  namespace: observability
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: prometheus-statsd-exporter
+  endpoints:
+  - port: metrics
+    interval: 15s

@@ -1,0 +1,85 @@
+controlPlane:
+  image:
+    repository: kumahq/kuma-cp
+    tag: 2.4.2
+  
+  replicas: 3
+  
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  
+  tls:
+    general:
+      secretName: kuma-tls-general
+    apiServer:
+      secretName: kuma-tls-apiserver
+    kdsGlobalServer:
+      secretName: kuma-tls-kds-global-server
+    kdsZoneClient:
+      secretName: kuma-tls-kds-zone-client
+  
+  defaults:
+    skipMeshCreation: false
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+dataPlane:
+  image:
+    repository: kumahq/kuma-dp
+    tag: 2.4.2
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+ingress:
+  enabled: true
+  
+  annotations:
+    kubernetes.io/ingress.class: kong
+
+metrics:
+  enabled: true
+  
+  prometheus:
+    enabled: true
+    port: 5670
+    
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: prometheus
+
+tracing:
+  enabled: true
+  
+  zipkin:
+    url: http://jaeger-collector.observability.svc.cluster.local:9411/api/v2/spans
+
+logging:
+  enabled: true
+  
+  backends:
+    - name: file
+      type: file
+      config:
+        path: /var/log/kuma/access.log
+    
+    - name: elasticsearch
+      type: elasticsearch
+      config:
+        address: http://elasticsearch-master.observability.svc.cluster.local:9200
+        index: kuma-logs
