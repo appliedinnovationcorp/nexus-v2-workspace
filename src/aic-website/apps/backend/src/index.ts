@@ -10,6 +10,9 @@ import compression from 'compression'
 import morgan from 'morgan'
 import dotenv from 'dotenv'
 
+// Import rate limiting middleware
+import { globalRateLimit } from './middleware/rate-limiter'
+
 import { EventBus } from './infrastructure/event-bus'
 import { CommandBus } from './infrastructure/command-bus'
 import { QueryBus } from './infrastructure/query-bus'
@@ -36,24 +39,66 @@ dotenv.config()
 const app = express()
 const port = process.env.PORT || 3100
 
+// CORS Configuration - Environment-specific origins
+const getCorsOrigins = () => {
+  const env = process.env.NODE_ENV || 'development';
+  
+  const corsOrigins = {
+    development: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'http://localhost:3003',
+      'http://localhost:3004',
+      'http://localhost:3005',
+    ],
+    staging: [
+      'https://staging.aicorp.com',
+      'https://smb-staging.aicorp.com',
+      'https://enterprise-staging.aicorp.com',
+      'https://nexus-staging.aicorp.com',
+      'https://investors-staging.aicorp.com',
+      'https://admin-staging.aicorp.com',
+    ],
+    production: [
+      'https://aicorp.com',
+      'https://smb.aicorp.com',
+      'https://enterprise.aicorp.com',
+      'https://nexus.aicorp.com',
+      'https://investors.aicorp.com',
+      'https://admin.aicorp.com',
+    ]
+  };
+  
+  // Allow custom origins from environment variable for flexibility
+  const customOrigins = process.env.CORS_ORIGINS?.split(',').map(origin => origin.trim()) || [];
+  
+  return [...corsOrigins[env], ...customOrigins];
+};
+
 // Middleware
 app.use(helmet())
+app.use(globalRateLimit) // Apply global rate limiting first
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
-    'http://localhost:3003',
-    'http://localhost:3004',
-    'http://localhost:3005',
-    'https://aicorp.com',
-    'https://smb.aicorp.com',
-    'https://enterprise.aicorp.com',
-    'https://nexus.aicorp.com',
-    'https://investors.aicorp.com',
-    'https://admin.aicorp.com',
-  ],
-  credentials: true
+  origin: (origin, callback) => {
+    const allowedOrigins = getCorsOrigins();
+    
+    // Allow requests with no origin (mobile apps, Postman, etc.) only in development
+    if (!origin && process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked request from origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  maxAge: 86400 // 24 hours
 }))
 app.use(compression())
 app.use(morgan('combined'))

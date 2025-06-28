@@ -3,34 +3,47 @@
 const KcAdminClient = require('@keycloak/keycloak-admin-client');
 const { Issuer } = require('openid-client');
 
+// Keycloak configuration for backend application
+
+const KcAdminClient = require('@keycloak/keycloak-admin-client');
+const { Issuer } = require('openid-client');
+
 // Environment-specific configuration
 const getKeycloakConfig = () => {
   const env = process.env.NODE_ENV || 'development';
   
+  // Validate required environment variables
+  const requiredVars = ['KEYCLOAK_URL', 'KEYCLOAK_REALM', 'KEYCLOAK_CLIENT_ID', 'KEYCLOAK_CLIENT_SECRET'];
+  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+  
+  if (missingVars.length > 0) {
+    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  }
+  
   const configs = {
     development: {
-      url: process.env.KEYCLOAK_URL || 'https://auth.dev.example.com',
-      realm: process.env.KEYCLOAK_REALM || 'aic-website',
-      clientId: process.env.KEYCLOAK_CLIENT_ID || 'aic-website-backend-api',
-      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'client-secret',
-      adminUser: process.env.KEYCLOAK_ADMIN_USER || 'admin',
-      adminPassword: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
+      url: process.env.KEYCLOAK_URL, // No fallback - must be set
+      realm: process.env.KEYCLOAK_REALM, // No fallback - must be set
+      clientId: process.env.KEYCLOAK_CLIENT_ID, // No fallback - must be set
+      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET, // No fallback - must be set
+      adminUser: process.env.KEYCLOAK_ADMIN_USER, // No fallback - must be set
+      adminPassword: process.env.KEYCLOAK_ADMIN_PASSWORD, // No fallback - must be set
     },
     staging: {
-      url: process.env.KEYCLOAK_URL || 'https://auth.staging.example.com',
-      realm: process.env.KEYCLOAK_REALM || 'aic-website',
-      clientId: process.env.KEYCLOAK_CLIENT_ID || 'aic-website-backend-api',
-      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'client-secret',
-      adminUser: process.env.KEYCLOAK_ADMIN_USER || 'admin',
-      adminPassword: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
+      url: process.env.KEYCLOAK_URL,
+      realm: process.env.KEYCLOAK_REALM,
+      clientId: process.env.KEYCLOAK_CLIENT_ID,
+      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET,
+      adminUser: process.env.KEYCLOAK_ADMIN_USER,
+      adminPassword: process.env.KEYCLOAK_ADMIN_PASSWORD,
     },
     production: {
-      url: process.env.KEYCLOAK_URL || 'https://auth.example.com',
-      realm: process.env.KEYCLOAK_REALM || 'aic-website',
-      clientId: process.env.KEYCLOAK_CLIENT_ID || 'aic-website-backend-api',
-      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'client-secret',
-      adminUser: process.env.KEYCLOAK_ADMIN_USER || 'admin',
-      adminPassword: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
+      url: process.env.KEYCLOAK_URL,
+      realm: process.env.KEYCLOAK_REALM,
+      clientId: process.env.KEYCLOAK_CLIENT_ID,
+      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET,
+      adminUser: process.env.KEYCLOAK_ADMIN_USER,
+      adminPassword: process.env.KEYCLOAK_ADMIN_PASSWORD,
     },
   };
   

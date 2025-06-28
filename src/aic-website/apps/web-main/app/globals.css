@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import accessibility styles */
+@import '../../packages/ui/src/styles/accessibility.css';
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -29,6 +32,11 @@
     --aic-blue: 231 65% 32%;
     --aic-teal: 187 100% 42%;
     --aic-slate: 210 18% 25%;
+    
+    /* Accessibility variables */
+    --color-focus: #4A90E2;
+    --motion-duration: 0.3s;
+    --base-font-size: 1rem;
   }
 
   .dark {
@@ -51,6 +59,9 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
+    
+    /* Dark mode accessibility variables */
+    --color-focus: #5EA8FF;
   }
 }
 
@@ -61,6 +72,23 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Accessibility focus styles */
+  *:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+  
+  /* Ensure interactive elements have appropriate sizing for touch targets */
+  button, 
+  a, 
+  input, 
+  select, 
+  textarea, 
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
   }
 }
 
@@ -103,6 +131,17 @@
   
   .animate-logo-scroll:hover {
     animation-play-state: paused;
+  }
+  
+  /* Reduced motion alternatives */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-in,
+    .animate-slide-up,
+    .animate-scale-in,
+    .animate-logo-scroll {
+      animation: none;
+      transition: none;
+    }
   }
 }
 

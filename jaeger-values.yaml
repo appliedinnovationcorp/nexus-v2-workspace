@@ -1,0 +1,267 @@
+# Jaeger Configuration Values for Applied Innovation Corporation Platform
+# This configuration is designed to integrate with the existing monitoring stack
+# (Prometheus + Grafana) and service mesh for distributed tracing
+
+# Global settings
+global:
+  namespace: observability
+  
+# Collector configuration
+collector:
+  enabled: true
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  resources:
+    limits:
+      cpu: 1
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  service:
+    type: ClusterIP
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "14269"
+  ingress:
+    enabled: false
+  # Configure sampling strategies
+  samplingConfig:
+    default:
+      type: probabilistic
+      param: 0.1  # Sample 10% of traces by default
+    perOperation:
+      # Higher sampling for critical paths
+      - operation: /api/auth
+        type: probabilistic
+        param: 0.5
+      - operation: /api/users
+        type: probabilistic
+        param: 0.3
+      - operation: /api/content
+        type: probabilistic
+        param: 0.3
+
+# Query service (UI) configuration
+query:
+  enabled: true
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  service:
+    type: ClusterIP
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "16686"
+  ingress:
+    enabled: true
+    hosts:
+      - jaeger.aicorp.com
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    tls:
+      - secretName: jaeger-tls
+        hosts:
+          - jaeger.aicorp.com
+  # UI customization
+  uiConfig:
+    menu:
+      - label: "AIC Platform"
+        url: "https://aicorp.com"
+    tracking:
+      gaID: ""  # Google Analytics ID if needed
+    dependencies:
+      menuEnabled: true
+    archiveEnabled: true
+
+# Agent configuration (for sidecar deployment)
+agent:
+  enabled: true
+  daemonset:
+    enabled: true
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Storage configuration
+storage:
+  type: elasticsearch  # Options: memory, cassandra, elasticsearch, kafka
+  elasticsearch:
+    host: elasticsearch-master.observability.svc.cluster.local
+    port: 9200
+    scheme: http
+    user: elastic
+    usePassword: true
+    existingSecret: elasticsearch-credentials
+    existingSecretKey: password
+    indexPrefix: jaeger
+    # Storage settings
+    nodeCount: 3
+    esIndexCleaner:
+      enabled: true
+      numberOfDays: 7
+      schedule: "0 0 * * *"
+    # Index settings
+    indexSettings:
+      shards: 5
+      replicas: 1
+    # Resource settings for ES
+    resources:
+      requests:
+        cpu: "1"
+        memory: "2Gi"
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+
+# Service mesh integration
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: prometheus
+
+# Integration with API Gateway
+apiGateway:
+  enabled: true
+  annotations:
+    konghq.com/plugins: jaeger-tracing
+
+# OpenTelemetry integration
+openTelemetry:
+  enabled: true
+  collector:
+    enabled: true
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+
+# Span processing and enrichment
+spanProcessing:
+  attributeProcessing:
+    enabled: true
+    rules:
+      - key: "service.name"
+        action: "upsert"
+        value: "${service.name}-${deployment.environment}"
+      - key: "environment"
+        action: "upsert"
+        value: "${deployment.environment}"
+
+# Integration with existing monitoring stack
+monitoring:
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      release: prometheus
+  grafanaDashboards:
+    enabled: true
+    labels:
+      grafana_dashboard: "1"
+
+# Security settings
+security:
+  authentication:
+    enabled: true
+    type: oauth
+    oauth:
+      clientID: jaeger-ui
+      clientSecret: ""
+      existingSecret: jaeger-oauth-secret
+      existingSecretKey: client-secret
+      issuer: https://auth.aicorp.com/oauth2/default
+      audience: jaeger-ui
+      scopes: ["openid", "profile", "email"]
+  tls:
+    enabled: true
+    caPath: /etc/jaeger/ca.crt
+    certPath: /etc/jaeger/tls.crt
+    keyPath: /etc/jaeger/tls.key
+
+# Persistence configuration
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  storageClass: standard
+
+# Affinity and node placement
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/role
+              operator: In
+              values:
+                - monitoring
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - jaeger
+          topologyKey: kubernetes.io/hostname
+
+# Tolerations for node taints
+tolerations:
+  - key: "monitoring"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# Integration with service mesh (Istio/Linkerd)
+serviceMesh:
+  istio:
+    enabled: true
+    injection: enabled
+  linkerd:
+    enabled: false
+
+# Tracing configuration for microservices
+tracing:
+  # Default configuration for all services
+  defaultConfig:
+    reporter:
+      queueSize: 1000
+      batchSize: 100
+      batchIntervalMs: 5000
+      logSpans: false
+    sampler:
+      type: const
+      param: 1
+  # Service-specific configurations
+  services:
+    auth-service:
+      sampler:
+        type: probabilistic
+        param: 1.0  # 100% sampling for auth service
+    user-service:
+      sampler:
+        type: probabilistic
+        param: 0.5  # 50% sampling for user service
+    content-service:
+      sampler:
+        type: probabilistic
+        param: 0.3  # 30% sampling for content service

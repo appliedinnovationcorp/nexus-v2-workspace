@@ -4,6 +4,7 @@
  */
 
 const EventEmitter = require('events');
+const { PredictiveScalingEngine } = require('./predictive-scaling-engine');
 
 class AutoScalingManager extends EventEmitter {
   constructor(config = {}) {
@@ -23,6 +24,14 @@ class AutoScalingManager extends EventEmitter {
       scaleDownCooldown: config.scaleDownCooldown || 600000, // 10 minutes
       enableCostOptimization: config.enableCostOptimization || false,
       maxCostPerHour: config.maxCostPerHour || 100,
+      
+      // Predictive scaling configuration
+      predictionHorizon: config.predictionHorizon || 24, // Hours to predict ahead
+      predictionInterval: config.predictionInterval || 15, // Minutes between predictions
+      predictionConfidenceThreshold: config.predictionConfidenceThreshold || 70,
+      enableAnomalyDetection: config.enableAnomalyDetection !== false,
+      enableTrendDetection: config.enableTrendDetection !== false,
+      
       ...config
     };
     
@@ -37,6 +46,17 @@ class AutoScalingManager extends EventEmitter {
     };
     
     this.lastScaleAction = null;
+    
+    // Initialize the advanced predictive scaling engine
+    this.predictiveEngine = new PredictiveScalingEngine({
+      predictionHorizon: this.config.predictionHorizon,
+      predictionInterval: this.config.predictionInterval,
+      confidenceThreshold: this.config.predictionConfidenceThreshold,
+      enableAnomalyDetection: this.config.enableAnomalyDetection,
+      enableTrendDetection: this.config.enableTrendDetection
+    });
+    
+    // Keep the old predictive model for backward compatibility
     this.predictiveModel = {
       patterns: new Map(),
       predictions: []
@@ -60,8 +80,27 @@ class AutoScalingManager extends EventEmitter {
       // Setup scaling evaluation
       this.startScalingEvaluation();
       
-      // Setup predictive scaling if enabled
+      // Initialize and setup predictive scaling if enabled
       if (this.config.enablePredictiveScaling) {
+        await this.predictiveEngine.initialize();
+        
+        // Forward predictive engine events
+        this.predictiveEngine.on('predictionsGenerated', (data) => {
+          this.emit('predictionsGenerated', data);
+        });
+        
+        this.predictiveEngine.on('anomalyDetected', (data) => {
+          this.emit('anomalyDetected', data);
+        });
+        
+        this.predictiveEngine.on('error', (data) => {
+          this.emit('error', {
+            ...data,
+            source: 'predictiveEngine'
+          });
+        });
+        
+        // For backward compatibility
         this.startPredictiveScaling();
       }
       
@@ -137,6 +176,11 @@ class AutoScalingManager extends EventEmitter {
         errorRate: this.simulateErrorRate(),
         timestamp: new Date().toISOString()
       };
+      
+      // Feed metrics to predictive engine if enabled
+      if (this.config.enablePredictiveScaling) {
+        this.predictiveEngine.addMetricsDataPoint(this.metrics);
+      }
       
       this.emit('metricsCollected', this.metrics);
       
@@ -258,6 +302,30 @@ class AutoScalingManager extends EventEmitter {
       confidence: 0
     };
     
+    if (!this.config.enablePredictiveScaling) {
+      return decision;
+    }
+    
+    // Use the advanced predictive engine
+    const engineRecommendation = this.predictiveEngine.getScalingRecommendation(
+      this.metrics,
+      this.currentReplicas,
+      this.config.minReplicas,
+      this.config.maxReplicas
+    );
+    
+    if (engineRecommendation.action !== 'none' && 
+        engineRecommendation.confidence >= this.config.predictionConfidenceThreshold) {
+      return {
+        action: engineRecommendation.action,
+        reason: engineRecommendation.reason,
+        targetReplicas: engineRecommendation.targetReplicas,
+        confidence: engineRecommendation.confidence,
+        prediction: engineRecommendation.prediction
+      };
+    }
+    
+    // Fallback to legacy predictive logic
     // Check predictions for next 15 minutes
     const nearTermPredictions = this.predictiveModel.predictions.filter(
       p => new Date(p.timestamp).getTime() <= Date.now() + 900000 // 15 minutes
@@ -561,17 +629,34 @@ class AutoScalingManager extends EventEmitter {
    * Get scaling status
    */
   getScalingStatus() {
-    return {
+    const status = {
       currentReplicas: this.currentReplicas,
       minReplicas: this.config.minReplicas,
       maxReplicas: this.config.maxReplicas,
       lastScaleAction: this.lastScaleAction,
       metrics: this.metrics,
       costMetrics: this.costMetrics,
-      predictions: this.predictiveModel.predictions.slice(0, 4), // Next hour
       scalingHistory: this.scalingHistory.slice(-10), // Last 10 actions
       timestamp: new Date().toISOString()
     };
+    
+    // Add predictive scaling information if enabled
+    if (this.config.enablePredictiveScaling) {
+      // Get predictions from the advanced engine
+      const enginePredictions = this.predictiveEngine.getPredictionsForNextPeriod(60); // Next hour
+      
+      status.predictiveEngine = {
+        status: this.predictiveEngine.getStatus(),
+        predictions: enginePredictions,
+        anomalies: this.predictiveEngine.getRecentAnomalies().slice(0, 5), // Last 5 anomalies
+        trends: this.predictiveEngine.getCurrentTrends()
+      };
+      
+      // For backward compatibility
+      status.predictions = this.predictiveModel.predictions.slice(0, 4);
+    }
+    
+    return status;
   }
 
   /**

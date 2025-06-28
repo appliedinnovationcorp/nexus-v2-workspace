@@ -1,0 +1,65 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "ES6"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      // Standardized import paths - use @ prefix for all internal imports
+      "@/*": ["./src/*"],
+      "@/components/*": ["./src/components/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/contexts/*": ["./src/contexts/*", "./contexts/*"],
+      "@/hooks/*": ["./src/hooks/*", "./hooks/*"],
+      "@/utils/*": ["./src/utils/*", "./utils/*"],
+      "@/types/*": ["./src/types/*", "./types/*"],
+      "@/styles/*": ["./src/styles/*", "./styles/*"],
+      "@/config/*": ["./src/config/*", "./config/*"],
+      
+      // Shared packages - use @aic prefix for workspace packages
+      "@aic/ui": ["../../packages/ui/src"],
+      "@aic/ui/*": ["../../packages/ui/src/*"],
+      "@aic/auth": ["../../packages/auth/src"],
+      "@aic/auth/*": ["../../packages/auth/src/*"],
+      "@aic/config": ["../../packages/config/src"],
+      "@aic/config/*": ["../../packages/config/src/*"],
+      "@aic/database": ["../../packages/database/src"],
+      "@aic/database/*": ["../../packages/database/src/*"],
+      "@aic/utils": ["../../packages/utils/src"],
+      "@aic/utils/*": ["../../packages/utils/src/*"],
+      "@aic/ai-sdk": ["../../packages/ai-sdk/src"],
+      "@aic/ai-sdk/*": ["../../packages/ai-sdk/src/*"],
+      "@aic/event-bus": ["../../packages/event-bus/src"],
+      "@aic/event-bus/*": ["../../packages/event-bus/src/*"],
+      "@aic/observability": ["../../packages/observability/src"],
+      "@aic/observability/*": ["../../packages/observability/src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    "dist",
+    "build"
+  ]
+}

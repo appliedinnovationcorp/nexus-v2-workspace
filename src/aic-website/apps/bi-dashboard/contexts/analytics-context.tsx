@@ -1,33 +1,205 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, ReactNode } from 'react';
 import { useQuery, useQueryClient } from 'react-query';
 import { io, Socket } from 'socket.io-client';
-import { analyticsApi } from '@/lib/api/analytics';
 import { toast } from 'react-hot-toast';
+import { useAnalyticsStore, useAppStore } from '@aic/utils';
+import { useErrorHandler } from '@aic/ui';
 
-interface AnalyticsMetrics {
-  revenue: {
-    total: number;
-    change: number;
-    trend: 'up' | 'down' | 'stable';
-    chartData: Array<{ date: string; value: number }>;
+interface AnalyticsContextType {
+  // Real-time socket connection
+  socket: Socket | null;
+  // Query client for data fetching
+  queryClient: ReturnType<typeof useQueryClient>;
+  // Refresh data
+  refreshData: () => Promise<void>;
+}
+
+const AnalyticsContext = createContext<AnalyticsContextType | undefined>(undefined);
+
+interface AnalyticsProviderProps {
+  children: ReactNode;
+}
+
+export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }) => {
+  const [socket, setSocket] = React.useState<Socket | null>(null);
+  const queryClient = useQueryClient();
+  const { handleError } = useErrorHandler();
+  
+  // Use Zustand stores
+  const {
+    metrics,
+    realTimeData,
+    dateRange,
+    filters,
+    setMetrics,
+    setRealTimeData,
+    setLoading,
+    setError,
+    clearError,
+  } = useAnalyticsStore();
+
+  const { addNotification } = useAppStore();
+
+  // Initialize socket connection
+  useEffect(() => {
+    const socketConnection = io('/analytics', {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    socketConnection.on('connect', () => {
+      console.log('Analytics socket connected');
+      addNotification({
+        type: 'success',
+        title: 'Connected',
+        message: 'Real-time analytics connected',
+      });
+    });
+
+    socketConnection.on('disconnect', () => {
+      console.log('Analytics socket disconnected');
+      addNotification({
+        type: 'warning',
+        title: 'Disconnected',
+        message: 'Real-time analytics disconnected',
+      });
+    });
+
+    socketConnection.on('analytics:update', (data) => {
+      setRealTimeData(data);
+    });
+
+    socketConnection.on('analytics:metrics', (data) => {
+      setMetrics(data);
+    });
+
+    socketConnection.on('error', (error) => {
+      handleError(new Error(error.message), 'Analytics Socket');
+      setError(error.message);
+    });
+
+    setSocket(socketConnection);
+
+    return () => {
+      socketConnection.disconnect();
+    };
+  }, [setMetrics, setRealTimeData, setError, addNotification, handleError]);
+
+  // Fetch initial analytics data
+  const { data: analyticsData, isLoading, error, refetch } = useQuery(
+    ['analytics', dateRange, filters],
+    async () => {
+      setLoading(true);
+      clearError();
+      
+      try {
+        const response = await fetch('/api/analytics', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            dateRange,
+            filters,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setMetrics(data.metrics);
+        return data;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch analytics data';
+        setError(errorMessage);
+        handleError(error instanceof Error ? error : new Error(errorMessage), 'Analytics API');
+        throw error;
+      } finally {
+        setLoading(false);
+      }
+    },
+    {
+      refetchInterval: 30000, // Refetch every 30 seconds
+      refetchIntervalInBackground: true,
+      staleTime: 10000, // Consider data stale after 10 seconds
+      cacheTime: 300000, // Keep in cache for 5 minutes
+      retry: 3,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      onError: (error) => {
+        toast.error('Failed to load analytics data');
+        handleError(error instanceof Error ? error : new Error('Analytics query failed'), 'Analytics Query');
+      },
+      onSuccess: () => {
+        clearError();
+      },
+    }
+  );
+
+  // Refresh data function
+  const refreshData = async () => {
+    try {
+      await refetch();
+      toast.success('Analytics data refreshed');
+    } catch (error) {
+      toast.error('Failed to refresh data');
+      handleError(error instanceof Error ? error : new Error('Refresh failed'), 'Analytics Refresh');
+    }
   };
-  users: {
-    active: number;
-    change: number;
-    trend: 'up' | 'down' | 'stable';
-    acquisitionData: Array<{ date: string; organic: number; paid: number; referral: number }>;
+
+  // Handle loading state
+  useEffect(() => {
+    setLoading(isLoading);
+  }, [isLoading, setLoading]);
+
+  // Handle error state
+  useEffect(() => {
+    if (error) {
+      setError(error instanceof Error ? error.message : 'An error occurred');
+    }
+  }, [error, setError]);
+
+  const contextValue: AnalyticsContextType = {
+    socket,
+    queryClient,
+    refreshData,
   };
-  conversion: {
-    rate: number;
-    change: number;
-    trend: 'up' | 'down' | 'stable';
-  };
-  satisfaction: {
-    score: number;
-    change: number;
-    trend: 'up' | 'down' | 'stable';
+
+  return (
+    <AnalyticsContext.Provider value={contextValue}>
+      {children}
+    </AnalyticsContext.Provider>
+  );
+};
+
+export const useAnalytics = (): AnalyticsContextType => {
+  const context = useContext(AnalyticsContext);
+  if (!context) {
+    throw new Error('useAnalytics must be used within an AnalyticsProvider');
+  }
+  return context;
+};
+
+// Custom hooks for specific analytics data
+export const useAnalyticsMetrics = () => {
+  const { metrics, loading, error } = useAnalyticsStore();
+  return { metrics, loading, error };
+};
+
+export const useRealTimeData = () => {
+  const { realTimeData, loading } = useAnalyticsStore();
+  return { realTimeData, loading };
+};
+
+export const useAnalyticsFilters = () => {
+  const { filters, dateRange, updateFilters, setDateRange, resetFilters } = useAnalyticsStore();
+  return { filters, dateRange, updateFilters, setDateRange, resetFilters };
+};
   };
   traffic: {
     sources: Array<{ name: string; value: number; color: string }>;

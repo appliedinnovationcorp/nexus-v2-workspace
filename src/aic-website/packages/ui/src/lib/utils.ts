@@ -1,54 +1,57 @@
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { type ClassValue, clsx } from 'clsx';
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return clsx(inputs);
 }
 
-// AIC Brand Colors
-export const aicColors = {
-  primary: {
-    blue: '#1A237E',
-    teal: '#00BCD4',
-    slate: '#37474F',
-  },
-  secondary: {
-    lightGray: '#F5F5F5',
-    white: '#FFFFFF',
-    success: '#4CAF50',
-    warning: '#FF9800',
-    error: '#F44336',
-  },
-  gradients: {
-    primary: 'linear-gradient(135deg, #1A237E 0%, #00BCD4 100%)',
-    subtle: 'linear-gradient(135deg, #37474F 0%, #1A237E 100%)',
-    hero: 'linear-gradient(135deg, #1A237E 0%, #00BCD4 50%, #37474F 100%)',
-  }
-}
+// Accessibility utilities
+export const generateId = (prefix: string = 'aic'): string => {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
 
-// Responsive breakpoints
-export const breakpoints = {
-  sm: '640px',
-  md: '768px',
-  lg: '1024px',
-  xl: '1280px',
-  '2xl': '1536px',
-}
+export const announceToScreenReader = (message: string, priority: 'polite' | 'assertive' = 'polite'): void => {
+  const announcement = document.createElement('div');
+  announcement.setAttribute('aria-live', priority);
+  announcement.setAttribute('aria-atomic', 'true');
+  announcement.className = 'sr-only';
+  announcement.textContent = message;
 
-// Animation utilities
-export const animations = {
-  fadeIn: 'animate-in fade-in duration-500',
-  slideUp: 'animate-in slide-in-from-bottom-4 duration-500',
-  slideDown: 'animate-in slide-in-from-top-4 duration-500',
-  scaleIn: 'animate-in zoom-in-95 duration-300',
-}
+  document.body.appendChild(announcement);
 
-// Typography utilities
-export const typography = {
-  h1: 'text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight',
-  h2: 'text-3xl md:text-4xl font-semibold tracking-tight',
-  h3: 'text-2xl md:text-3xl font-semibold',
-  h4: 'text-xl md:text-2xl font-medium',
-  body: 'text-base leading-relaxed',
-  caption: 'text-sm text-muted-foreground',
-}
+  setTimeout(() => {
+    if (document.body.contains(announcement)) {
+      document.body.removeChild(announcement);
+    }
+  }, 1000);
+};
+
+export const trapFocus = (element: HTMLElement): (() => void) => {
+  const focusableElements = element.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  
+  const firstFocusable = focusableElements[0] as HTMLElement;
+  const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'Tab') return;
+
+    if (e.shiftKey) {
+      if (document.activeElement === firstFocusable) {
+        e.preventDefault();
+        lastFocusable?.focus();
+      }
+    } else {
+      if (document.activeElement === lastFocusable) {
+        e.preventDefault();
+        firstFocusable?.focus();
+      }
+    }
+  };
+
+  element.addEventListener('keydown', handleKeyDown);
+
+  return () => {
+    element.removeEventListener('keydown', handleKeyDown);
+  };
+};

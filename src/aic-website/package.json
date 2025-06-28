@@ -30,11 +30,13 @@
     "infra:destroy": "cd infra/terraform && terraform destroy",
     "setup": "./scripts/setup-local.sh",
     "deploy": "./scripts/deploy.sh",
-    "deploy:staging": "./scripts/deploy.sh staging",
-    "deploy:production": "./scripts/deploy.sh production",
+    "deploy:staging": "npm run validate:security && ./scripts/deploy.sh staging",
+    "deploy:production": "npm run validate:security && ./scripts/deploy.sh production",
     "seed": "tsx scripts/seed-content.ts",
     "db:setup": "echo 'Database setup placeholder'",
-    "health-check": "curl -f http://localhost:3000/api/health || echo 'Health check failed'"
+    "health-check": "curl -f http://localhost:3000/api/health || echo 'Health check failed'",
+    "validate:security": "node scripts/validate-security-config.js",
+    "generate:secrets": "echo \"JWT_SECRET=$(openssl rand -base64 32)\nNEXTAUTH_SECRET=$(openssl rand -base64 32)\" > .env.secrets"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",

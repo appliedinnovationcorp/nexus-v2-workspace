@@ -13,6 +13,7 @@ import bcrypt
 import redis
 import asyncio
 import logging
+import sys
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import create_engine, Column, String, DateTime, Boolean, Text
 from sqlalchemy.ext.declarative import declarative_base
@@ -25,12 +26,49 @@ from prometheus_client import Counter, Histogram, generate_latest
 import os
 import uuid
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger("auth-service")
+
+# Environment validation
+def validate_environment():
+    """Validate required environment variables"""
+    required_vars = {
+        "DATABASE_URL": os.getenv("DATABASE_URL"),
+        "REDIS_URL": os.getenv("REDIS_URL"),
+        "JWT_SECRET_KEY": os.getenv("JWT_SECRET_KEY")
+    }
+    
+    missing_vars = [var for var, value in required_vars.items() if not value]
+    
+    if missing_vars:
+        logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
+        if os.getenv("ENVIRONMENT", "development") == "production":
+            sys.exit(1)
+    
+    # Check for default secrets in production
+    if (os.getenv("ENVIRONMENT") == "production" and 
+        (not os.getenv("JWT_SECRET_KEY") or 
+         os.getenv("JWT_SECRET_KEY") == "your-secret-key-change-in-production")):
+        logger.error("JWT_SECRET_KEY must be set to a secure value in production")
+        sys.exit(1)
+
+# Run environment validation
+validate_environment()
+
 # Configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/auth_db")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "30"))
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
 # Initialize FastAPI
 app = FastAPI(
@@ -39,22 +77,51 @@ app = FastAPI(
     version="1.0.0"
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configure CORS based on environment
+if ENVIRONMENT == "production":
+    # Stricter CORS for production
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "https://aicorp.com",
+            "https://api.aicorp.com",
+            "https://admin.aicorp.com"
+        ],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+else:
+    # More permissive for development
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Database setup
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+try:
+    engine = create_engine(DATABASE_URL)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base = declarative_base()
+    logger.info("Database connection established")
+except Exception as e:
+    logger.error(f"Failed to connect to database: {e}")
+    if ENVIRONMENT == "production":
+        sys.exit(1)
 
 # Redis setup
-import redis as redis_sync
-redis_client = redis_sync.from_url(REDIS_URL)
+try:
+    import redis as redis_sync
+    redis_client = redis_sync.from_url(REDIS_URL)
+    redis_client.ping()  # Test connection
+    logger.info("Redis connection established")
+except Exception as e:
+    logger.error(f"Failed to connect to Redis: {e}")
+    if ENVIRONMENT == "production":
+        sys.exit(1)
 
 # Security
 security = HTTPBearer()
@@ -63,8 +130,8 @@ security = HTTPBearer()
 trace.set_tracer_provider(TracerProvider())
 tracer = trace.get_tracer(__name__)
 jaeger_exporter = JaegerExporter(
-    agent_host_name="jaeger-agent",
-    agent_port=6831,
+    agent_host_name=os.getenv("JAEGER_HOST", "jaeger-agent"),
+    agent_port=int(os.getenv("JAEGER_PORT", "6831")),
 )
 span_processor = BatchSpanProcessor(jaeger_exporter)
 trace.get_tracer_provider().add_span_processor(span_processor)
@@ -100,7 +167,13 @@ class RefreshToken(Base):
     is_revoked = Column(Boolean, default=False)
 
 # Create tables
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created or verified")
+except Exception as e:
+    logger.error(f"Failed to create database tables: {e}")
+    if ENVIRONMENT == "production":
+        sys.exit(1)
 
 # Pydantic Models
 class UserCreate(BaseModel):

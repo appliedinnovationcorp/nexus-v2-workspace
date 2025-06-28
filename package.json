@@ -1,14 +1,33 @@
 {
   "name": "nexus-v2-workspace",
   "version": "1.0.0",
-  "description": "",
+  "description": "Applied Innovation Corporation Website Platform",
   "main": "index.js",
   "scripts": {
     "next": "node scripts/openNextFeature.js",
-    "done": "node scripts/openNextFeature.js done"
+    "done": "node scripts/openNextFeature.js done",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
+    "prepare": "husky install"
   },
   "keywords": [],
-  "author": "",
+  "author": "Applied Innovation Corporation",
   "license": "ISC",
-  "packageManager": "pnpm@10.11.1"
+  "packageManager": "pnpm@10.11.1",
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-jsx-a11y": "^6.8.0",
+    "eslint-plugin-prettier": "^5.0.1",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.1.1",
+    "typescript": "^5.3.3"
+  }
 }

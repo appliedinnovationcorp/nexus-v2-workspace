@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter, Roboto } from 'next/font/google'
 import { Header } from '../src/components/header'
 import { Footer } from '../src/components/footer'
+import { PageErrorBoundary, AccessibilityProvider, SkipLinks } from '@aic/ui'
 import './globals.css'
 
 const inter = Inter({
@@ -83,11 +84,16 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${roboto.variable}`}>
       <body className="min-h-screen bg-background font-sans antialiased">
-        <Header />
-        <main className="flex-1">
-          {children}
-        </main>
-        <Footer />
+        <AccessibilityProvider>
+          <PageErrorBoundary>
+            <SkipLinks />
+            <Header />
+            <main id="main-content" className="flex-1" role="main">
+              {children}
+            </main>
+            <Footer />
+          </PageErrorBoundary>
+        </AccessibilityProvider>
       </body>
     </html>
   )

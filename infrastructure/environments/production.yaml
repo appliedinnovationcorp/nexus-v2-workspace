@@ -1,0 +1,76 @@
+# Production Environment Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aic-production-config
+  namespace: aic-platform
+data:
+  # Application Configuration
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  
+  # Database Configuration
+  DB_POOL_MIN: "10"
+  DB_POOL_MAX: "100"
+  DB_TIMEOUT: "30000"
+  DB_SSL_MODE: "require"
+  
+  # Redis Configuration
+  REDIS_POOL_SIZE: "20"
+  REDIS_TIMEOUT: "5000"
+  
+  # API Configuration
+  API_RATE_LIMIT: "1000"
+  API_TIMEOUT: "30000"
+  
+  # Security Configuration
+  CORS_ORIGINS: "https://aicorp.com,https://smb.aicorp.com,https://enterprise.aicorp.com,https://nexus.aicorp.com,https://investors.aicorp.com,https://admin.aicorp.com"
+  HELMET_ENABLED: "true"
+  CSP_ENABLED: "true"
+  
+  # Monitoring Configuration
+  METRICS_ENABLED: "true"
+  TRACING_ENABLED: "true"
+  HEALTH_CHECK_INTERVAL: "30"
+  
+  # AI/ML Configuration
+  AI_MODEL_CACHE_SIZE: "1000"
+  AI_REQUEST_TIMEOUT: "60000"
+  VECTOR_DB_POOL_SIZE: "50"
+  
+  # CDN Configuration
+  CDN_ENABLED: "true"
+  STATIC_CACHE_TTL: "31536000"
+  
+  # Performance Configuration
+  COMPRESSION_ENABLED: "true"
+  KEEP_ALIVE_TIMEOUT: "65000"
+  MAX_CONNECTIONS: "10000"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aic-staging-config
+  namespace: aic-platform
+data:
+  NODE_ENV: "staging"
+  LOG_LEVEL: "debug"
+  DB_POOL_MIN: "5"
+  DB_POOL_MAX: "50"
+  API_RATE_LIMIT: "500"
+  METRICS_ENABLED: "true"
+  TRACING_ENABLED: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aic-development-config
+  namespace: aic-platform
+data:
+  NODE_ENV: "development"
+  LOG_LEVEL: "debug"
+  DB_POOL_MIN: "2"
+  DB_POOL_MAX: "10"
+  API_RATE_LIMIT: "100"
+  METRICS_ENABLED: "false"
+  TRACING_ENABLED: "false"
