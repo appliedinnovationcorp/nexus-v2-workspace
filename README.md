@@ -94,13 +94,28 @@ npm run deploy:production
 
 ## Project Structure
 ```
-aic-website/
-├── apps/                  # Application domains
-├── packages/              # Shared libraries
-├── infra/                 # Infrastructure as Code
-├── docs/                  # Documentation
-└── tools/                 # Development tools
+nexus-v2-workspace/
+├── src/aic-website/       # Main website application
+├── developer-ai/          # 🤖 Agile Feature Development Algorithm
+├── features/              # Feature specifications
+├── docs/                  # Project documentation
+├── scripts/               # Development scripts
+└── Summaries/             # Implementation summaries
 ```
+
+## 🤖 Developer AI System
+The project includes a comprehensive **Agile Feature Development Algorithm** that can automatically develop any software feature from natural language descriptions:
+
+```bash
+# Quick start with Developer AI
+cd developer-ai
+python run.py examples
+
+# Develop a custom feature
+python run.py "user authentication system with OAuth2"
+```
+
+See `developer-ai/README.md` for complete documentation.
 
 ## Key Features
 - 🤖 AI-native architecture with embedded LLM services
