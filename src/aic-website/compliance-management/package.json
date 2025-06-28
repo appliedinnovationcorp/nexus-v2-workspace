@@ -1,0 +1,292 @@
+{
+  "name": "@aic/compliance-management",
+  "version": "1.0.0",
+  "description": "Advanced Compliance Management System for AIC Website Platform",
+  "main": "core/compliance-manager.js",
+  "scripts": {
+    "start": "node examples/complete-integration.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:compliance": "jest --testPathPattern=compliance",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "audit": "npm audit",
+    "security:scan": "node scripts/security-scan.js",
+    "compliance:scan": "node scripts/compliance-scan.js",
+    "build": "npm run lint && npm run test",
+    "deploy:staging": "node scripts/deploy-staging.js",
+    "deploy:production": "node scripts/deploy-production.js",
+    "docs": "jsdoc -c jsdoc.conf.json",
+    "report:gdpr": "node scripts/generate-gdpr-report.js",
+    "report:ccpa": "node scripts/generate-ccpa-report.js",
+    "report:sox": "node scripts/generate-sox-report.js",
+    "benchmark": "node scripts/benchmark.js"
+  },
+  "keywords": [
+    "compliance",
+    "gdpr",
+    "ccpa",
+    "sox",
+    "pci-dss",
+    "hipaa",
+    "privacy",
+    "data-protection",
+    "audit",
+    "regulatory",
+    "enterprise",
+    "aic",
+    "next.js",
+    "express",
+    "react",
+    "middleware",
+    "automation",
+    "reporting",
+    "governance"
+  ],
+  "author": "Applied Innovation Corporation",
+  "license": "PROPRIETARY",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "dependencies": {
+    "crypto": "^1.0.1",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "node-forge": "^1.3.1",
+    "express": "^4.18.2",
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "uuid": "^9.0.1",
+    "lodash": "^4.17.21",
+    "moment": "^2.29.4",
+    "validator": "^13.11.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.55.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-security": "^1.7.1",
+    "eslint-plugin-jest": "^27.6.0",
+    "jsdoc": "^4.0.2",
+    "supertest": "^6.3.3",
+    "nodemon": "^3.0.2",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "pdf-lib": "^1.17.1",
+    "csv-writer": "^1.6.0"
+  },
+  "peerDependencies": {
+    "next": ">=13.0.0",
+    "express": ">=4.18.0",
+    "react": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aic-corp/compliance-management.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aic-corp/compliance-management/issues"
+  },
+  "homepage": "https://github.com/aic-corp/compliance-management#readme",
+  "files": [
+    "core/",
+    "examples/",
+    "docs/",
+    "README.md",
+    "IMPLEMENTATION_GUIDE.md"
+  ],
+  "config": {
+    "compliance": {
+      "defaultRetentionPeriod": 2592000000,
+      "maxRetentionPeriod": 220752000000,
+      "scanInterval": 3600000,
+      "alertThreshold": 0.95
+    },
+    "regulations": {
+      "gdpr": {
+        "responseTimeLimit": 2592000000,
+        "dataRetentionMax": 63072000000
+      },
+      "ccpa": {
+        "responseTimeLimit": 1296000000,
+        "businessThresholds": {
+          "revenue": 25000000,
+          "consumers": 50000
+        }
+      },
+      "sox": {
+        "certificationFrequency": "quarterly",
+        "auditFrequency": "annual"
+      }
+    }
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "core/**/*.js",
+      "examples/**/*.js",
+      "!**/node_modules/**",
+      "!**/tests/**"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 85,
+        "functions": 85,
+        "lines": 85,
+        "statements": 85
+      }
+    },
+    "testMatch": [
+      "**/tests/**/*.test.js",
+      "**/__tests__/**/*.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ]
+  },
+  "eslintConfig": {
+    "extends": [
+      "airbnb-base",
+      "plugin:security/recommended",
+      "plugin:jest/recommended"
+    ],
+    "env": {
+      "node": true,
+      "jest": true,
+      "es2022": true
+    },
+    "rules": {
+      "no-console": "warn",
+      "security/detect-object-injection": "error",
+      "security/detect-non-literal-regexp": "error",
+      "security/detect-unsafe-regex": "error",
+      "max-len": ["error", { "code": 120 }],
+      "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+      "class-methods-use-this": "off",
+      "no-await-in-loop": "off"
+    }
+  },
+  "funding": {
+    "type": "corporate",
+    "url": "https://appliedinnovation.com"
+  },
+  "security": {
+    "advisories": {
+      "ignore": []
+    },
+    "policies": {
+      "vulnerability-disclosure": "https://appliedinnovation.com/security/disclosure"
+    }
+  },
+  "compliance": {
+    "regulations": [
+      "GDPR (EU) 2016/679",
+      "CCPA (California Consumer Privacy Act)",
+      "SOX (Sarbanes-Oxley Act)",
+      "PCI DSS (Payment Card Industry Data Security Standard)",
+      "HIPAA (Health Insurance Portability and Accountability Act)"
+    ],
+    "certifications": [
+      "SOC 2 Type II",
+      "ISO 27001/27002",
+      "NIST Cybersecurity Framework",
+      "FedRAMP Ready"
+    ],
+    "standards": [
+      "NIST Privacy Framework",
+      "ISO 27701 (Privacy Information Management)",
+      "COSO Internal Control Framework",
+      "COBIT 2019"
+    ]
+  },
+  "performance": {
+    "benchmarks": {
+      "compliance-verification": "<100ms",
+      "audit-logging": "<10ms",
+      "report-generation": "<5s",
+      "data-export": "<30s"
+    },
+    "scalability": {
+      "max-concurrent-requests": 1000,
+      "max-audit-events-per-second": 10000,
+      "max-data-subjects": 1000000
+    }
+  },
+  "integration": {
+    "supported-frameworks": [
+      "Next.js 13+",
+      "Express.js 4+",
+      "React 18+",
+      "Node.js 18+"
+    ],
+    "databases": [
+      "PostgreSQL",
+      "MongoDB",
+      "MySQL",
+      "SQLite"
+    ],
+    "cloud-platforms": [
+      "AWS",
+      "Google Cloud Platform",
+      "Microsoft Azure",
+      "On-premises"
+    ],
+    "third-party-integrations": [
+      "Slack (notifications)",
+      "Email (SMTP)",
+      "SIEM systems",
+      "Identity providers (SAML, OAuth2)"
+    ]
+  },
+  "monitoring": {
+    "metrics": [
+      "compliance-score",
+      "violation-count",
+      "audit-events",
+      "data-subject-requests",
+      "consent-updates",
+      "report-generation-time"
+    ],
+    "alerts": [
+      "compliance-violations",
+      "audit-failures",
+      "data-breaches",
+      "deadline-approaching",
+      "system-errors"
+    ],
+    "dashboards": [
+      "compliance-overview",
+      "regulation-specific",
+      "audit-trail",
+      "performance-metrics"
+    ]
+  },
+  "reporting": {
+    "formats": [
+      "JSON",
+      "PDF",
+      "CSV",
+      "XML"
+    ],
+    "schedules": [
+      "real-time",
+      "daily",
+      "weekly",
+      "monthly",
+      "quarterly",
+      "annual"
+    ],
+    "recipients": [
+      "compliance-team",
+      "legal-team",
+      "executives",
+      "auditors",
+      "regulators"
+    ]
+  }
+}
