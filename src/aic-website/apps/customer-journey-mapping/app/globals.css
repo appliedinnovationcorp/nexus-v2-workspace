@@ -1,0 +1,223 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Journey Flow Styles */
+@layer components {
+  .journey-stage {
+    @apply relative rounded-lg border-2 border-dashed border-gray-300 p-6 transition-all duration-200;
+  }
+
+  .journey-stage.active {
+    @apply border-primary bg-primary/5;
+  }
+
+  .journey-stage.completed {
+    @apply border-green-500 bg-green-50;
+  }
+
+  .journey-touchpoint {
+    @apply flex items-center justify-center w-12 h-12 rounded-full border-2 transition-all duration-200 cursor-pointer;
+  }
+
+  .journey-touchpoint.digital {
+    @apply border-blue-500 bg-blue-50 text-blue-600;
+  }
+
+  .journey-touchpoint.physical {
+    @apply border-green-500 bg-green-50 text-green-600;
+  }
+
+  .journey-touchpoint.social {
+    @apply border-purple-500 bg-purple-50 text-purple-600;
+  }
+
+  .journey-touchpoint.support {
+    @apply border-yellow-500 bg-yellow-50 text-yellow-600;
+  }
+
+  .journey-touchpoint.marketing {
+    @apply border-red-500 bg-red-50 text-red-600;
+  }
+
+  .journey-connection {
+    @apply absolute top-1/2 left-full w-8 h-0.5 bg-gray-300 transform -translate-y-1/2;
+  }
+
+  .journey-connection.active {
+    @apply bg-primary;
+  }
+
+  .journey-metrics-card {
+    @apply bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow;
+  }
+
+  .journey-persona-card {
+    @apply bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 hover:shadow-lg transition-all duration-200;
+  }
+
+  .journey-optimization-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .journey-optimization-badge.high {
+    @apply bg-red-100 text-red-800;
+  }
+
+  .journey-optimization-badge.medium {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+
+  .journey-optimization-badge.low {
+    @apply bg-green-100 text-green-800;
+  }
+
+  /* Flow diagram styles */
+  .react-flow__node {
+    @apply border-2 border-gray-300 rounded-lg bg-white shadow-sm;
+  }
+
+  .react-flow__node.selected {
+    @apply border-primary;
+  }
+
+  .react-flow__edge {
+    @apply stroke-gray-400;
+  }
+
+  .react-flow__edge.selected {
+    @apply stroke-primary;
+  }
+
+  .react-flow__controls {
+    @apply bg-white border border-gray-200 rounded-lg shadow-sm;
+  }
+
+  .react-flow__minimap {
+    @apply bg-gray-50 border border-gray-200 rounded-lg;
+  }
+
+  /* Animation classes */
+  .journey-pulse {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .journey-slide-in {
+    animation: slide-in 0.3s ease-out;
+  }
+
+  .journey-fade-in {
+    animation: fade-in 0.5s ease-out;
+  }
+
+  /* Custom scrollbar */
+  .journey-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .journey-scrollbar::-webkit-scrollbar-track {
+    @apply bg-gray-100 rounded-full;
+  }
+
+  .journey-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full hover:bg-gray-400;
+  }
+
+  /* Loading states */
+  .journey-skeleton {
+    @apply animate-pulse bg-gray-200 rounded;
+  }
+
+  /* Responsive grid */
+  .journey-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+  }
+
+  /* Print styles */
+  @media print {
+    .journey-no-print {
+      display: none !important;
+    }
+    
+    .journey-print-break {
+      page-break-after: always;
+    }
+  }
+}
+
+/* Custom utilities */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .journey-gradient-text {
+    @apply bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent;
+  }
+
+  .journey-glass {
+    @apply bg-white/80 backdrop-blur-sm border border-white/20;
+  }
+
+  .journey-shadow-glow {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+}
